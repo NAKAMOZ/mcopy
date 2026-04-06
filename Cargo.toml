@@ -1,0 +1,31 @@
+[[bin]]
+name = "mcopy"
+path = "src/main.rs"
+
+[package]
+name = "mcopy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Core dependencies (cross-platform)
+clap = { version = "4.5.53", features = ["derive"] }
+futures = "0.3.31"
+indicatif = "0.17"
+num_cpus = "1.16"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+arboard = "3.6"  # Cross-platform clipboard
+
+# GPUI UI
+gpui = "0.2"
+gpui-component = "0.5"
+
+# Windows-specific dependencies
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+is_elevated = "0.1"
+
+# Windows build dependencies
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "2.4"
