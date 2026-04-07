@@ -1,4 +1,5 @@
 use arboard::Clipboard;
+use mcopy::normalize_path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,16 +30,6 @@ fn now_epoch() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-}
-
-/// Windows UNC path prefix'ini kaldır (\\?\C:\... -> C:\...)
-fn normalize_path(path: PathBuf) -> PathBuf {
-    let path_str = path.to_string_lossy();
-    if path_str.starts_with(r"\\?\") {
-        PathBuf::from(&path_str[4..])
-    } else {
-        path
-    }
 }
 
 /// Paths'i clipboard'a yaz (newline separated, absolute paths)
@@ -86,10 +77,10 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
 
     // Yeni path'leri ekle (duplicate kontrolü ile)
     for path in paths {
-        if let Ok(abs_path) = path.canonicalize().map(normalize_path) {
-            if !existing.contains(&abs_path) {
-                existing.push(abs_path);
-            }
+        if let Ok(abs_path) = path.canonicalize().map(normalize_path)
+            && !existing.contains(&abs_path)
+        {
+            existing.push(abs_path);
         }
     }
 

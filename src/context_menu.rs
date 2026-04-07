@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 // ============================================================================
 // Windows Implementation
@@ -10,7 +10,7 @@ mod windows_impl {
     use winreg::enums::*;
 
     /// Context menu'yu registry'ye kur
-    pub fn install_context_menu(exe_path: &PathBuf) -> anyhow::Result<()> {
+    pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let exe_str = exe_path
             .to_str()
@@ -142,11 +142,12 @@ mod macos_impl {
     use super::*;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
 
     const SERVICES_DIR: &str = "Library/Services";
 
     /// macOS Finder Services kurulumu
-    pub fn install_context_menu(exe_path: &PathBuf) -> anyhow::Result<()> {
+    pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
@@ -366,9 +367,10 @@ mod linux_impl {
     use super::*;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
 
     /// Linux file manager entegrasyonu (Nautilus, Dolphin, Thunar)
-    pub fn install_context_menu(exe_path: &PathBuf) -> anyhow::Result<()> {
+    pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
         let exe_str = exe_path
             .to_str()
@@ -501,7 +503,7 @@ pub use linux_impl::{install_context_menu, uninstall_context_menu};
 
 // Fallback for unsupported platforms
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-pub fn install_context_menu(_exe_path: &PathBuf) -> anyhow::Result<()> {
+pub fn install_context_menu(_exe_path: &Path) -> anyhow::Result<()> {
     anyhow::bail!("Bu platform için context menu entegrasyonu desteklenmiyor")
 }
 

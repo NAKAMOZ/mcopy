@@ -18,8 +18,7 @@ anyhow = "1.0"
 arboard = "3.6"  # Cross-platform clipboard
 
 # GPUI UI
-gpui = "0.2"
-gpui-component = "0.5"
+gpui = "0.2.2"
 
 # Windows-specific dependencies
 [target.'cfg(windows)'.dependencies]

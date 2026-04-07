@@ -1,176 +1,192 @@
-# mcopy - Asenkron Klasör Kopyalama Aracı
+# mcopy
 
-Windows sağ tık menüsü entegrasyonu ile hızlı ve performanslı dosya kopyalama aracı.
+Windows sag tik menusu ile hizli dosya ve klasor kopyalama araci.
 
-## Özellikler
+`mcopy`, secilen dosya veya klasor yollarini once clipboard'a alir, ardindan hedef klasorde tek tikla kopyalama baslatir. Kopyalama sirasinda GPUI tabanli bir pencere acilir ve ilerleme, duraklat/devam et ve durdur kontrolleri gorunur.
 
-- ✅ **Asenkron kopyalama**: Tokio ile paralel dosya işlemleri
-- ✅ **Windows Context Menu**: Sağ tık ile "mcopy ile kopyala" ve "mcopy ile yapıştır"
-- ✅ **Clipboard entegrasyonu**: Dosya yollarını clipboard üzerinden taşıma
-- ✅ **Progress bar**: Terminal tabanlı ilerleme göstergesi
-- ✅ **Optimal performans**: CPU core sayısına göre otomatik concurrency ayarı
-- ✅ **Klasör optimizasyonu**: Hedef klasörleri önceden oluşturma
+## Ozellikler
 
-## Kurulum
+- Asenkron ve paralel kopyalama
+- Windows Explorer context menu entegrasyonu
+- Coklu secim destegi
+- Clipboard tabanli copy/paste akisi
+- GPUI ilerleme penceresi
+- Duraklat, devam et ve durdur kontrolleri
+- Legacy CLI modu
 
-### 1. Build
+## Hizli Baslangic
 
-```bash
+### 1. Release build al
+
+```powershell
 cargo build --release
 ```
 
-### 2. Context Menu Kurulumu (Opsiyonel)
+Olusan dosya:
 
-Admin PowerShell açın:
+```text
+target\release\mcopy.exe
+```
+
+### 2. Context menu kur
+
+Admin yetkili PowerShell ac ve proje klasorunde su komutu calistir:
 
 ```powershell
-# Sağ tık menüsünü kur
 .\target\release\mcopy.exe install
+```
 
-# Kaldırmak için
+Alternatif olarak dogrudan Cargo ile de calistirabilirsin:
+
+```powershell
+cargo run --release -- install
+```
+
+Bu komut su sag tik menu girdilerini ekler:
+
+- Dosya uzerinde `mcopy ile kopyala`
+- Klasor uzerinde `mcopy ile kopyala`
+- Klasor uzerinde `mcopy ile buraya yapistir`
+- Klasor boslugunda `mcopy ile yapistir`
+- Disk kokunde `mcopy ile yapistir`
+
+### 3. Context menu kaldir
+
+Yine admin yetkili PowerShell ile:
+
+```powershell
 .\target\release\mcopy.exe uninstall
 ```
 
-## Kullanım
+veya:
 
-### CLI Mode (Legacy)
-
-```bash
-# Basit kullanım
-mcopy kaynak_klasor hedef_klasor
-
-# Concurrency ayarı
-mcopy kaynak_klasor hedef_klasor -j 16
-
-# Progress bar kapalı
-mcopy kaynak_klasor hedef_klasor --no-progress
+```powershell
+cargo run --release -- uninstall
 ```
 
-### Context Menu Mode
+## Kurulum Notlari
 
-1. **Kopyala**: Dosya/klasöre sağ tık → "mcopy ile kopyala"
-2. **Yapıştır**: Hedef klasörde boş alana sağ tık → "mcopy ile yapıştır"
+- `install` ve `uninstall` komutlari Windows registry yazdigi icin admin yetkisi ister.
+- Uygulamayi farkli bir klasore tasirsan veya yeni bir release exe olusturursan `install` komutunu tekrar calistirman iyi olur.
+- Sag tik menusu eski exe'yi gosteriyorsa en guvenlisi once `uninstall`, sonra yeni exe ile tekrar `install` calistirmaktir.
+- Sadece normal kullanimda admin gerekmez. Admin yetkisi yalnizca menu kurulum/kaldirma icindir.
 
-### Manuel Clipboard Kullanımı
+## Kullanim
 
-```bash
-# Clipboard'a kopyala
+### Explorer uzerinden
+
+1. Dosya veya klasoru sec.
+2. Sag tik yapip `mcopy ile kopyala` sec.
+3. Hedef klasore git.
+4. Bos alanda veya klasor uzerinde sag tik yapip `mcopy ile yapistir` sec.
+5. Acilan pencereden kopyalama durumunu izle.
+
+Kopyalama penceresinde:
+
+- `Duraklat` yeni islerin baslamasini bekletir
+- `Devam Et` kuyrugu yeniden calistirir
+- `Durdur` kalan kuyrugu iptal eder
+
+Not:
+Baslamis tekil `fs::copy` islemleri guvenli sekilde tamamlanir. Duraklatma ve durdurma kooperatif calisir; mevcut algoritma degistirilmeden yeni islerin baslamasi kontrol edilir.
+
+### CLI modu
+
+Legacy terminal kullanimini korumak icin su komutlar hala aktif:
+
+```powershell
+mcopy C:\kaynak C:\hedef
+```
+
+```powershell
+mcopy C:\kaynak C:\hedef -j 16
+```
+
+```powershell
+mcopy C:\kaynak C:\hedef --no-progress
+```
+
+### Manuel clipboard komutlari
+
+```powershell
 mcopy copy C:\kaynak\dosya.txt
+```
 
-# Clipboard'tan yapıştır
+```powershell
 mcopy paste C:\hedef\klasor
 ```
 
-## Mimari
-
-```
-mcopy/
-├── src/
-│   ├── main.rs          # CLI orchestration ve subcommand routing
-│   ├── lib.rs           # Shared kopyalama logic (async)
-│   ├── clipboard.rs     # Clipboard yönetimi (arboard)
-│   ├── context_menu.rs  # Registry işlemleri (winreg)
-│   └── ui.rs            # UI modülü (gelecek sürümler için)
-├── build.rs             # Windows manifest embedding
-├── mcopy.rc             # Resource file
-└── mcopy.manifest       # UAC manifest
+```powershell
+mcopy clear
 ```
 
-## Registry Yapısı
+## Proje Yapisi
 
+```text
+src/
+|- main.rs
+|- lib.rs
+|- clipboard.rs
+|- context_menu.rs
+`- ui/
+   |- mod.rs
+   |- constants.rs
+   |- progress.rs
+   |- widgets.rs
+   `- window.rs
 ```
-HKLM\SOFTWARE\Classes\*\shell\mcopy_copy
-    → "mcopy ile kopyala" (dosyalar için)
 
-HKLM\SOFTWARE\Classes\Directory\shell\mcopy_copy
-    → "mcopy ile kopyala" (klasörler için)
+Kisa aciklama:
 
-HKLM\SOFTWARE\Classes\Directory\Background\shell\mcopy_paste
-    → "mcopy ile yapıştır" (boş alan için)
-```
+- `main.rs`: CLI routing ve uygulama akisi
+- `lib.rs`: ortak kopyalama mantigi ve kontrol mekanizmasi
+- `clipboard.rs`: clipboard islemleri
+- `context_menu.rs`: Windows registry context menu kurulumu
+- `ui/`: GPUI pencere, bilesenler ve progress durumu
 
-## Bağımlılıklar
+## Teknik Notlar
 
-- `tokio` - Async runtime
-- `futures` - Stream processing
-- `clap` - CLI parsing
-- `indicatif` - Progress bars
-- `winreg` - Windows Registry
-- `arboard` - Clipboard
-- `is_elevated` - Admin kontrolü
-- `anyhow` - Error handling
-- `num_cpus` - CPU core detection
-
-## Performans
-
-- **Concurrency**: Varsayılan `CPU cores × 4` (max 128)
-- **Optimizasyon**: Klasörleri önceden oluşturma
-- **Progress**: Her 100-200ms'de bir güncelleme
-
-## Sınırlamalar
-
-### MVP Sürümü
-- ❌ GPUI UI henüz entegre değil (API karmaşıklığı nedeniyle)
-- ✅ Terminal tabanlı progress bar kullanılıyor
-- ✅ Temel context menu fonksiyonalitesi çalışıyor
-
-### Gelecek Geliştirmeler (v2)
-- Modern UI (GPUI veya Native Windows IProgressDialog)
-- İkon desteği
-- Çakışma çözümü (conflict resolution)
-- Windows bildirimleri
-- Çoklu seçim optimizasyonu
-
-## Güvenlik
-
-- Admin yetkisi sadece install/uninstall için gerekli
-- Normal kullanımda admin yetkisi gerekmez
-- Registry yazma: HKEY_LOCAL_MACHINE (tüm kullanıcılar için)
-
-## Lisans
-
-Bu proje eğitim amaçlıdır.
-
-## Test
-
-```bash
-# Test klasörleri oluştur
-mkdir test_src
-echo "test" > test_src/file.txt
-
-# Clipboard testi
-.\target\release\mcopy.exe copy test_src
-.\target\release\mcopy.exe paste test_dst
-
-# Legacy mode testi
-.\target\release\mcopy.exe test_src test_dst2
-
-# Context menu testi (Admin PowerShell)
-.\target\release\mcopy.exe install
-# Dosya Gezgini'nde sağ tık menüsünü kontrol et
-.\target\release\mcopy.exe uninstall
-```
+- Varsayilan concurrency: `CPU core sayisi x 4`
+- Concurrency alt sinir: `4`
+- Concurrency ust sinir: `128`
+- Hedef klasorler kopyalama oncesi olusturulur
+- Windows tarafinda UNC prefix temizligi uygulanir
 
 ## Sorun Giderme
 
-### "Admin yetkisi gerekli" Hatası
-PowerShell'i "Run as Administrator" ile açın.
+### Sag tik menusu gorunmuyor
 
-### "Clipboard'ta geçerli dosya/klasör yolu bulunamadı"
-Önce "mcopy ile kopyala" komutunu kullanın.
+- Komutu admin PowerShell ile calistirdigindan emin ol.
+- `.\target\release\mcopy.exe install` komutunu tekrar calistir.
+- Gerekirse Explorer'i yeniden baslat veya oturumu kapatip ac.
 
-### Registry Hatası
-- Antivirüs yazılımı registry yazımını engelliyor olabilir
-- Manuel olarak regedit ile kontrol edin
+### Eski UI aciliyor
 
-## Katkıda Bulunma
+- Muhtemelen registry eski exe yolunu kullaniyordur.
+- `uninstall` calistir.
+- Ardindan guncel release exe ile tekrar `install` calistir.
 
-1. Fork edin
-2. Feature branch oluşturun
-3. Commit edin
-4. Push edin
-5. Pull Request açın
+### "Admin yetkisi gerekli" hatasi
 
-## Yazar
+- PowerShell'i `Run as Administrator` ile ac.
 
-Bu proje Rust öğrenme sürecinde geliştirilmiştir.
+### Clipboard'ta gecerli yol bulunamadi
+
+- Once `mcopy ile kopyala` komutunu calistir.
+- Kopyaladigin dosya veya klasorun hala mevcut oldugundan emin ol.
+
+## Gelistirme
+
+Yerel dogrulama icin:
+
+```powershell
+cargo fmt
+```
+
+```powershell
+cargo check
+```
+
+```powershell
+cargo clippy --all-targets -- -W unused -W dead_code -W unused_imports
+```

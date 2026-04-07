@@ -15,7 +15,8 @@ mod ui;
 
 // lib.rs'teki fonksiyonları kullan
 use mcopy::{
-    calculate_concurrency, collect_files, copy_files_with_progress, precreate_directories,
+    CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
+    copy_files_with_progress, normalize_path, precreate_directories,
 };
 
 #[derive(Parser, Debug)]
@@ -136,31 +137,47 @@ async fn main() -> anyhow::Result<()> {
 
             // Progress durumunu oluştur
             let progress = ui::CopyProgress::new(all_files.len());
+            let controller = CopyController::new();
             let progress_clone = progress.clone();
+            let controller_clone = controller.clone();
 
             // UI thread'i başlat
-            std::thread::spawn(move || {
-                ui::show_progress_window(progress_clone);
+            let ui_thread = std::thread::spawn(move || {
+                ui::show_progress_window(progress_clone, controller_clone);
             });
 
             // Klasörleri oluştur
             precreate_directories(&all_files).await?;
 
+            if controller.is_cancelled() {
+                progress.cancelled();
+                let _ = ui_thread.join();
+                return Ok(());
+            }
+
             // Progress callback oluştur
             let progress_for_callback = progress.clone();
-            let callback = Box::new(
-                move |idx: usize, _total: usize, filename: String, bytes: u64, total_bytes: u64| {
-                    progress_for_callback.update(filename, idx, bytes, total_bytes);
-                },
-            );
+            let callback = Box::new(move |update: ProgressUpdate| {
+                progress_for_callback.apply(update);
+            });
 
             // Kopyala
             let concurrency = calculate_concurrency(None);
-            copy_files_with_progress(all_files, concurrency, Some(callback)).await?;
+            copy_files_with_progress(
+                all_files,
+                concurrency,
+                Some(callback),
+                Some(controller.clone()),
+            )
+            .await?;
 
-            // Tamamlandı - biraz bekle UI kapansın
-            progress.complete();
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            if controller.is_cancelled() {
+                progress.cancelled();
+            } else {
+                progress.complete();
+            }
+
+            let _ = ui_thread.join();
         }
 
         None => {
@@ -213,21 +230,28 @@ async fn main() -> anyhow::Result<()> {
                 let overall_clone = overall.clone();
 
                 // Callback oluştur
-                let callback = Box::new(
-                    move |_idx, _total, filename: String, _bytes, _total_bytes| {
-                        current_clone.set_message(format!("Kopyalanıyor: {}", filename));
-                        overall_clone.inc(1);
-                    },
-                );
+                let callback = Box::new(move |update: ProgressUpdate| match update.phase {
+                    ProgressPhase::Started => {
+                        current_clone.set_message(format!("Kopyalanıyor: {}", update.file_name));
+                    }
+                    ProgressPhase::Finished => {
+                        current_clone.set_message(format!("Tamamlandı: {}", update.file_name));
+                        overall_clone.set_position(update.processed_files as u64);
+                    }
+                    ProgressPhase::Failed => {
+                        current_clone.set_message(format!("Atlandı/Hata: {}", update.file_name));
+                        overall_clone.set_position(update.processed_files as u64);
+                    }
+                });
 
                 // Kopyala
-                copy_files_with_progress(files, concurrency, Some(callback)).await?;
+                copy_files_with_progress(files, concurrency, Some(callback), None).await?;
 
                 overall.finish_with_message("Kopyalama tamamlandı!");
                 current.finish_and_clear();
             } else {
                 // Progress yok
-                copy_files_with_progress(files, concurrency, None).await?;
+                copy_files_with_progress(files, concurrency, None, None).await?;
             }
 
             let elapsed = start.elapsed();
@@ -254,14 +278,4 @@ fn require_admin() -> anyhow::Result<()> {
 fn require_admin() -> anyhow::Result<()> {
     // Unix'te genelde sudo gerekli değil, kullanıcı home dizinine yazıyoruz
     Ok(())
-}
-
-/// Windows UNC path prefix'ini kaldır (\\?\C:\... -> C:\...)
-fn normalize_path(path: PathBuf) -> PathBuf {
-    let path_str = path.to_string_lossy();
-    if path_str.starts_with(r"\\?\") {
-        PathBuf::from(&path_str[4..])
-    } else {
-        path
-    }
 }
