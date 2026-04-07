@@ -1,8 +1,11 @@
-use super::constants::{ButtonTone, PAGE_BG, PANEL_BG, PANEL_BORDER, WINDOW_HEIGHT, WINDOW_WIDTH};
+use super::constants::{
+    ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
+    WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 use super::progress::CopyProgress;
 use super::widgets::{
-    action_button, controls_row, file_info_card, header_row, message_banner, metric_chip,
-    progress_bar, status_badge, truncate_middle,
+    action_button, controls_row, counter_display, drag_region, file_name_row, header_row,
+    message_banner, progress_bar, status_text, surface_card,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
@@ -84,21 +87,15 @@ impl Render for ProgressWindow {
         self.ensure_close_guard(window, cx);
 
         let snapshot = self.progress.snapshot();
-        let accent = snapshot.accent(&self.controller);
         let pause_disabled = snapshot.is_terminal()
             || self.controller.is_cancelled()
             || (snapshot.processed_files() == 0 && snapshot.active_files == 0);
-        let stop_disabled = snapshot.is_terminal() || self.controller.is_cancelled();
+        let cancel_disabled = snapshot.is_terminal() || self.controller.is_cancelled();
+        let visual = resolve_visual_state(&snapshot, &self.controller);
         let file_display = if snapshot.current_file.is_empty() {
-            "Ilk dosya icin hazirlaniyor...".to_string()
+            visual.file_placeholder.to_string()
         } else {
-            truncate_middle(&snapshot.current_file, 54)
-        };
-
-        let pause_label = if self.controller.is_paused() {
-            "Devam Et"
-        } else {
-            "Duraklat"
+            snapshot.current_file.clone()
         };
 
         window.set_window_title(&snapshot.window_title(&self.controller));
@@ -107,14 +104,10 @@ impl Render for ProgressWindow {
         }
 
         let pause_controller = self.controller.clone();
-        let pause_button = action_button(
+        let primary_button = action_button(
             "pause-copy",
-            pause_label,
-            if self.controller.is_paused() {
-                ButtonTone::Success
-            } else {
-                ButtonTone::Primary
-            },
+            visual.primary_label,
+            visual.primary_tone,
             pause_disabled,
             move |_, _, _| {
                 if pause_controller.is_paused() {
@@ -125,83 +118,124 @@ impl Render for ProgressWindow {
             },
         );
 
-        let stop_controller = self.controller.clone();
-        let stop_button = action_button(
-            "stop-copy",
-            if self.controller.is_cancelled() {
-                "Durduruluyor"
-            } else {
-                "Durdur"
-            },
-            ButtonTone::Danger,
-            stop_disabled,
-            move |_, _, _| stop_controller.cancel(),
+        let cancel_controller = self.controller.clone();
+        let cancel_button = action_button(
+            "cancel-copy",
+            "Cancel",
+            ButtonTone::Outline,
+            cancel_disabled,
+            move |_, _, _| cancel_controller.cancel(),
         );
 
-        div().size_full().p_4().bg(rgb(PAGE_BG)).child(
+        surface_card().size_full().font_family("Inter").child(
             div()
-                .size_full()
+                .w_full()
                 .flex()
                 .flex_col()
-                .overflow_hidden()
-                .rounded_xl()
-                .border_1()
-                .border_color(rgb(PANEL_BORDER))
-                .bg(rgb(PANEL_BG))
-                .shadow_lg()
-                .child(div().h(px(5.)).w_full().bg(rgb(accent)))
-                .child(
+                .gap_3()
+                .px_6()
+                .py_5()
+                .child(drag_region(
                     div()
-                        .flex_1()
+                        .w_full()
                         .flex()
                         .flex_col()
                         .gap_3()
-                        .p_4()
                         .child(header_row(
-                            status_badge(snapshot.title(&self.controller), accent),
-                            snapshot.title(&self.controller),
-                            snapshot.subtitle(&self.controller),
-                            format!("{:.0}%", snapshot.percent()),
+                            status_text(visual.status_label.to_string(), visual.status_color),
+                            counter_display(
+                                snapshot.processed_files(),
+                                snapshot.total_files,
+                                visual.counter_primary_color,
+                                visual.counter_secondary_color,
+                            ),
                         ))
-                        .child(progress_bar(snapshot.percent(), accent))
-                        .child(controls_row(pause_button, stop_button))
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(metric_chip(
-                                    "Islenen",
-                                    format!(
-                                        "{}/{}",
-                                        snapshot.processed_files(),
-                                        snapshot.total_files
-                                    ),
-                                    0x38bdf8,
-                                ))
-                                .child(metric_chip(
-                                    "Aktif",
-                                    snapshot.active_files.to_string(),
-                                    0xfbbf24,
-                                ))
-                                .child(metric_chip(
-                                    "Kalan",
-                                    snapshot.remaining_files().to_string(),
-                                    if snapshot.failed_files > 0 {
-                                        0xfb7185
-                                    } else {
-                                        0x60a5fa
-                                    },
-                                )),
-                        )
-                        .child(file_info_card(file_display, snapshot.current_file_bytes))
-                        .when(snapshot.failed_files > 0, |this| {
-                            this.child(message_banner(format!(
-                                "{} dosyada hata olustu. Kopyalama kalan kuyrukla devam etti.",
-                                snapshot.failed_files
-                            )))
-                        }),
-                ),
+                        .child(progress_bar(snapshot.percent(), visual.progress_fill))
+                        .child(file_name_row(file_display)),
+                ))
+                .when(snapshot.failed_files > 0, |this| {
+                    this.child(message_banner(format!(
+                        "{} files failed while the queue continued.",
+                        snapshot.failed_files
+                    )))
+                })
+                .child(controls_row(cancel_button, primary_button)),
         )
+    }
+}
+
+struct VisualState {
+    status_label: &'static str,
+    status_color: u32,
+    counter_primary_color: u32,
+    counter_secondary_color: u32,
+    progress_fill: u32,
+    primary_label: &'static str,
+    primary_tone: ButtonTone,
+    file_placeholder: &'static str,
+}
+
+fn resolve_visual_state(
+    snapshot: &super::progress::CopyProgressSnapshot,
+    controller: &CopyController,
+) -> VisualState {
+    if snapshot.is_terminal() {
+        if controller.is_cancelled() {
+            VisualState {
+                status_label: "Cancelled",
+                status_color: MUTED_TEXT,
+                counter_primary_color: MUTED_TEXT,
+                counter_secondary_color: SOFT_TEXT,
+                progress_fill: WARNING_FILL,
+                primary_label: "Stopped",
+                primary_tone: ButtonTone::Primary,
+                file_placeholder: "Copy stopped before the next file.",
+            }
+        } else {
+            VisualState {
+                status_label: "Completed",
+                status_color: TITLE_TEXT,
+                counter_primary_color: TITLE_TEXT,
+                counter_secondary_color: MUTED_TEXT,
+                progress_fill: SUCCESS_FILL,
+                primary_label: "Done",
+                primary_tone: ButtonTone::Primary,
+                file_placeholder: "All files were copied.",
+            }
+        }
+    } else if controller.is_cancelled() {
+        VisualState {
+            status_label: "Cancelling",
+            status_color: MUTED_TEXT,
+            counter_primary_color: MUTED_TEXT,
+            counter_secondary_color: SOFT_TEXT,
+            progress_fill: WARNING_FILL,
+            primary_label: "Pause",
+            primary_tone: ButtonTone::Primary,
+            file_placeholder: "Finishing active copies before exit.",
+        }
+    } else if controller.is_paused() {
+        VisualState {
+            status_label: "Paused",
+            status_color: MUTED_TEXT,
+            counter_primary_color: MUTED_TEXT,
+            counter_secondary_color: SOFT_TEXT,
+            progress_fill: PAUSED_FILL,
+            primary_label: "Resume",
+            primary_tone: ButtonTone::Success,
+            file_placeholder: "Waiting to resume the queue.",
+        }
+    } else {
+        VisualState {
+            status_label: "Copying Files",
+            status_color: TITLE_TEXT,
+            counter_primary_color: TITLE_TEXT,
+            counter_secondary_color: MUTED_TEXT,
+            progress_fill: ACTIVE_FILL,
+            primary_label: "Pause",
+            primary_tone: ButtonTone::Primary,
+            file_placeholder: "Preparing the copy queue.",
+        }
     }
 }
 
@@ -210,15 +244,14 @@ pub fn show_progress_window(progress: CopyProgress, controller: CopyController) 
         let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions {
-                title: Some("mcopy".into()),
-                appears_transparent: false,
-                ..Default::default()
-            }),
+            titlebar: None,
             focus: true,
             show: true,
             kind: WindowKind::PopUp,
             is_resizable: false,
+            is_minimizable: false,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
             ..Default::default()
         };
 

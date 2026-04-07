@@ -3,19 +3,19 @@ use mcopy::normalize_path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Timestamp dosyasının yolu
+/// Path to the timestamp file.
 fn get_timestamp_path() -> PathBuf {
     std::env::temp_dir().join("mcopy_session.tmp")
 }
 
-/// Son kopyalama zamanını oku (epoch saniye)
+/// Read the last copy timestamp in epoch seconds.
 fn get_last_copy_time() -> Option<u64> {
     std::fs::read_to_string(get_timestamp_path())
         .ok()
         .and_then(|s| s.trim().parse().ok())
 }
 
-/// Son kopyalama zamanını kaydet
+/// Persist the latest copy timestamp.
 fn set_last_copy_time() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -24,7 +24,7 @@ fn set_last_copy_time() {
     let _ = std::fs::write(get_timestamp_path(), now.to_string());
 }
 
-/// Şu anki zaman (epoch saniye)
+/// Current time in epoch seconds.
 fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -32,11 +32,11 @@ fn now_epoch() -> u64 {
         .as_secs()
 }
 
-/// Paths'i clipboard'a yaz (newline separated, absolute paths)
+/// Write paths to the clipboard as newline-separated absolute paths.
 pub fn copy_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     let mut clipboard = Clipboard::new()?;
 
-    // Absolute path'lere çevir ve normalize et
+    // Canonicalize and normalize the input paths.
     let abs_paths: Vec<String> = paths
         .iter()
         .filter_map(|p| {
@@ -48,7 +48,7 @@ pub fn copy_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
         .collect();
 
     if abs_paths.is_empty() {
-        anyhow::bail!("Kopyalanacak geçerli dosya yolu bulunamadı");
+        anyhow::bail!("No valid file paths were found to copy");
     }
 
     let text = abs_paths.join("\n");
@@ -57,25 +57,25 @@ pub fn copy_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Mevcut clipboard'a path ekle (çoklu seçim için)
-/// Eğer son kopyalamadan 2 saniyeden fazla geçtiyse, yeni session başlat
+/// Append paths to the current clipboard payload.
+/// If more than two seconds passed since the last copy, start a new session.
 pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     const SESSION_TIMEOUT_SECS: u64 = 2;
 
-    // Son kopyalama zamanını kontrol et
+    // Decide whether the previous copy session is still active.
     let should_clear = match get_last_copy_time() {
         Some(last_time) => now_epoch() - last_time > SESSION_TIMEOUT_SECS,
-        None => true, // İlk kez çalışıyor
+        None => true,
     };
 
-    // Mevcut path'leri oku (timeout geçtiyse veya hata varsa boş liste)
+    // Reuse the previous clipboard payload when the session is still fresh.
     let mut existing = if should_clear {
         Vec::new()
     } else {
         paste_paths_from_clipboard().unwrap_or_default()
     };
 
-    // Yeni path'leri ekle (duplicate kontrolü ile)
+    // Append new paths while keeping the list unique.
     for path in paths {
         if let Ok(abs_path) = path.canonicalize().map(normalize_path)
             && !existing.contains(&abs_path)
@@ -85,10 +85,10 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     }
 
     if existing.is_empty() {
-        anyhow::bail!("Eklenecek geçerli dosya yolu bulunamadı");
+        anyhow::bail!("No valid file paths were found to append");
     }
 
-    // Clipboard'a yaz
+    // Write the merged payload back into the clipboard.
     let mut clipboard = Clipboard::new()?;
     let text = existing
         .iter()
@@ -101,7 +101,7 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Clipboard'tan paths oku (newline split, validation ile)
+/// Read newline-separated paths from the clipboard and keep only existing ones.
 pub fn paste_paths_from_clipboard() -> anyhow::Result<Vec<PathBuf>> {
     let mut clipboard = Clipboard::new()?;
     let text = clipboard.get_text()?;
@@ -119,11 +119,11 @@ pub fn paste_paths_from_clipboard() -> anyhow::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-/// Clipboard'ı temizle
+/// Clear the clipboard payload.
 pub fn clear_clipboard() -> anyhow::Result<()> {
     let mut clipboard = Clipboard::new()?;
     clipboard.set_text("")?;
-    // Timestamp dosyasını da sil
+    // Remove the session timestamp too.
     let _ = std::fs::remove_file(get_timestamp_path());
     Ok(())
 }

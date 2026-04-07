@@ -9,37 +9,37 @@ mod windows_impl {
     use winreg::RegKey;
     use winreg::enums::*;
 
-    /// Context menu'yu registry'ye kur
+    /// Install the context menu into the registry.
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let exe_str = exe_path
             .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Exe path geçersiz"))?;
+            .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
 
-        // Dosyalar için "mcopy ile kopyala"
+        // "Copy with mcopy" for files.
         install_for_files(&hklm, exe_str)?;
 
-        // Klasörler için "mcopy ile kopyala"
+        // "Copy with mcopy" for directories.
         install_for_directories(&hklm, exe_str)?;
 
-        // Boş alan için "mcopy ile yapıştır"
+        // "Paste with mcopy" for the directory background.
         install_paste_background(&hklm, exe_str)?;
 
-        // Klasör üzerine sağ tık için "mcopy ile yapıştır"
+        // "Paste here with mcopy" for a directory entry.
         install_paste_directory(&hklm, exe_str)?;
 
-        // Disk kökü için "mcopy ile yapıştır" (D:\, E:\ vb.)
+        // "Paste with mcopy" for drive roots such as D:\ or E:\.
         install_paste_drive(&hklm, exe_str)?;
 
-        println!("✓ Context menu başarıyla yüklendi!");
+        println!("✓ Context menu installed successfully!");
         Ok(())
     }
 
-    /// Context menu'yu registry'den kaldır
+    /// Remove the context menu from the registry.
     pub fn uninstall_context_menu() -> anyhow::Result<()> {
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
-        // Tüm entry'leri sil
+        // Delete every registered entry.
         delete_menu_entry(&hklm, r"SOFTWARE\Classes\*\shell", "mcopy_copy")?;
         delete_menu_entry(&hklm, r"SOFTWARE\Classes\Directory\shell", "mcopy_copy")?;
         delete_menu_entry(&hklm, r"SOFTWARE\Classes\Directory\shell", "mcopy_paste")?;
@@ -50,45 +50,46 @@ mod windows_impl {
         )?;
         delete_menu_entry(&hklm, r"SOFTWARE\Classes\Drive\shell", "mcopy_paste")?;
 
-        println!("✓ Context menu başarıyla kaldırıldı!");
+        println!("✓ Context menu removed successfully!");
         Ok(())
     }
 
-    /// Dosyalar için context menu kur (çoklu seçim destekli)
+    /// Install the file context menu entry with multi-select support.
     fn install_for_files(hklm: &RegKey, exe_path: &str) -> anyhow::Result<()> {
         let path = r"SOFTWARE\Classes\*\shell\mcopy_copy";
         let (key, _) = hklm.create_subkey(path)?;
-        key.set_value("", &"mcopy ile kopyala")?;
-        // Çoklu seçimde her dosya için ayrı çağrı yapılır, --append ile clipboard'a eklenir
+        key.set_value("", &"Copy with mcopy")?;
+        // Explorer invokes the command once per selected item; `--append`
+        // lets every invocation extend the shared clipboard session.
         key.set_value("MultiSelectModel", &"Player")?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
-        // --append kullanarak çoklu seçimde tüm dosyalar clipboard'a eklenir
+        // Append every selected file into the clipboard payload.
         cmd_key.set_value("", &format!("\"{}\" copy --append \"%1\"", exe_path))?;
 
         Ok(())
     }
 
-    /// Klasörler için context menu kur (çoklu seçim destekli)
+    /// Install the directory context menu entry with multi-select support.
     fn install_for_directories(hklm: &RegKey, exe_path: &str) -> anyhow::Result<()> {
         let path = r"SOFTWARE\Classes\Directory\shell\mcopy_copy";
         let (key, _) = hklm.create_subkey(path)?;
-        key.set_value("", &"mcopy ile kopyala")?;
-        // Çoklu seçimde her klasör için ayrı çağrı yapılır
+        key.set_value("", &"Copy with mcopy")?;
+        // Explorer invokes the command once per selected folder.
         key.set_value("MultiSelectModel", &"Player")?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
-        // --append kullanarak çoklu seçimde tüm klasörler clipboard'a eklenir
+        // Append every selected directory into the clipboard payload.
         cmd_key.set_value("", &format!("\"{}\" copy --append \"%1\"", exe_path))?;
 
         Ok(())
     }
 
-    /// Boş alan (background) için "mcopy ile yapıştır"
+    /// Install "Paste with mcopy" on the directory background.
     fn install_paste_background(hklm: &RegKey, exe_path: &str) -> anyhow::Result<()> {
         let path = r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
-        key.set_value("", &"mcopy ile yapıştır")?;
+        key.set_value("", &"Paste with mcopy")?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%V\"", exe_path))?;
@@ -96,11 +97,11 @@ mod windows_impl {
         Ok(())
     }
 
-    /// Klasör üzerine sağ tık için "mcopy ile yapıştır"
+    /// Install "Paste here with mcopy" on a directory entry.
     fn install_paste_directory(hklm: &RegKey, exe_path: &str) -> anyhow::Result<()> {
         let path = r"SOFTWARE\Classes\Directory\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
-        key.set_value("", &"mcopy ile buraya yapıştır")?;
+        key.set_value("", &"Paste here with mcopy")?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%1\"", exe_path))?;
@@ -108,11 +109,11 @@ mod windows_impl {
         Ok(())
     }
 
-    /// Disk kökü için "mcopy ile yapıştır" (D:\, E:\ vb.)
+    /// Install "Paste with mcopy" for drive roots such as D:\ or E:\.
     fn install_paste_drive(hklm: &RegKey, exe_path: &str) -> anyhow::Result<()> {
         let path = r"SOFTWARE\Classes\Drive\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
-        key.set_value("", &"mcopy ile yapıştır")?;
+        key.set_value("", &"Paste with mcopy")?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%1\"", exe_path))?;
@@ -120,16 +121,16 @@ mod windows_impl {
         Ok(())
     }
 
-    /// Menu entry'yi sil
+    /// Delete a single menu entry if it exists.
     fn delete_menu_entry(hklm: &RegKey, base_path: &str, menu_name: &str) -> anyhow::Result<()> {
         match hklm.open_subkey_with_flags(base_path, KEY_WRITE) {
             Ok(key) => match key.delete_subkey_all(menu_name) {
                 Ok(_) => Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(e) => Err(anyhow::anyhow!("Registry silme hatası: {}", e)),
+                Err(e) => Err(anyhow::anyhow!("Registry delete error: {}", e)),
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(anyhow::anyhow!("Registry açma hatası: {}", e)),
+            Err(e) => Err(anyhow::anyhow!("Registry open error: {}", e)),
         }
     }
 }
@@ -141,22 +142,21 @@ mod windows_impl {
 mod macos_impl {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
 
     const SERVICES_DIR: &str = "Library/Services";
 
-    /// macOS Finder Services kurulumu
+    /// Install macOS Finder Services.
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
-        // Services dizinini oluştur
+        // Create the Services directory.
         fs::create_dir_all(&services_dir)?;
 
         let exe_str = exe_path
             .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Exe path geçersiz"))?;
+            .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
 
         // mcopy Copy workflow
         create_automator_workflow(&services_dir, "mcopy Copy", exe_str, "copy")?;
@@ -164,18 +164,18 @@ mod macos_impl {
         // mcopy Paste workflow
         create_automator_workflow(&services_dir, "mcopy Paste", exe_str, "paste")?;
 
-        println!("✓ Finder Services başarıyla yüklendi!");
-        println!("  Konum: {}", services_dir.display());
-        println!("  Not: System Preferences > Keyboard > Shortcuts > Services'dan etkinleştirin");
+        println!("✓ Finder Services installed successfully!");
+        println!("  Location: {}", services_dir.display());
+        println!("  Note: Enable them in System Preferences > Keyboard > Shortcuts > Services");
         Ok(())
     }
 
-    /// macOS Finder Services kaldırma
+    /// Remove macOS Finder Services.
     pub fn uninstall_context_menu() -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
-        // Workflow'ları sil
+        // Remove the workflow bundles.
         let copy_workflow = services_dir.join("mcopy Copy.workflow");
         let paste_workflow = services_dir.join("mcopy Paste.workflow");
 
@@ -186,7 +186,7 @@ mod macos_impl {
             fs::remove_dir_all(&paste_workflow)?;
         }
 
-        println!("✓ Finder Services başarıyla kaldırıldı!");
+        println!("✓ Finder Services removed successfully!");
         Ok(())
     }
 
@@ -369,42 +369,42 @@ mod linux_impl {
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
 
-    /// Linux file manager entegrasyonu (Nautilus, Dolphin, Thunar)
+    /// Install Linux file manager integration (Nautilus, Dolphin, Thunar).
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
         let exe_str = exe_path
             .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Exe path geçersiz"))?;
+            .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
 
-        // Nautilus scripts
+        // Nautilus scripts.
         install_nautilus_scripts(&home, exe_str)?;
 
-        // Dolphin (KDE) service menus
+        // Dolphin (KDE) service menus.
         install_dolphin_service(&home, exe_str)?;
 
-        // Thunar (XFCE) custom actions
-        install_thunar_actions(&home, exe_str)?;
+        // Thunar (XFCE) custom actions.
+        install_thunar_actions(exe_str)?;
 
-        println!("✓ File manager entegrasyonu başarıyla yüklendi!");
+        println!("✓ File manager integration installed successfully!");
         Ok(())
     }
 
-    /// Linux file manager entegrasyonunu kaldır
+    /// Remove Linux file manager integration.
     pub fn uninstall_context_menu() -> anyhow::Result<()> {
         let home = std::env::var("HOME")?;
 
-        // Nautilus
+        // Nautilus.
         let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
         let _ = fs::remove_file(nautilus_dir.join("mcopy-copy"));
         let _ = fs::remove_file(nautilus_dir.join("mcopy-paste"));
 
-        // Dolphin
+        // Dolphin.
         let dolphin_dir = PathBuf::from(&home).join(".local/share/kservices5/ServiceMenus");
         let _ = fs::remove_file(dolphin_dir.join("mcopy.desktop"));
 
-        // Thunar - uca.xml düzenlenmeli ama karmaşık, kullanıcıya bilgi ver
-        println!("✓ Nautilus ve Dolphin entegrasyonu kaldırıldı!");
-        println!("  Not: Thunar için manuel olarak Edit > Configure custom actions'dan kaldırın");
+        // Thunar uses `uca.xml`, which is more complicated to edit safely.
+        println!("✓ Nautilus and Dolphin integration removed!");
+        println!("  Note: Remove the Thunar actions manually from Edit > Configure custom actions");
 
         Ok(())
     }
@@ -413,7 +413,7 @@ mod linux_impl {
         let scripts_dir = PathBuf::from(home).join(".local/share/nautilus/scripts");
         fs::create_dir_all(&scripts_dir)?;
 
-        // Copy script
+        // Copy script.
         let copy_script = format!(
             r#"#!/bin/bash
 # mcopy - Copy selected files/folders
@@ -427,7 +427,7 @@ done
         fs::write(&copy_path, copy_script)?;
         fs::set_permissions(&copy_path, fs::Permissions::from_mode(0o755))?;
 
-        // Paste script
+        // Paste script.
         let paste_script = format!(
             r#"#!/bin/bash
 # mcopy - Paste to current directory
@@ -455,12 +455,12 @@ MimeType=all/all;
 Actions=mcopy_copy;mcopy_paste;
 
 [Desktop Action mcopy_copy]
-Name=mcopy ile kopyala
+Name=Copy with mcopy
 Icon=edit-copy
 Exec="{}" copy %f
 
 [Desktop Action mcopy_paste]
-Name=mcopy ile yapıştır
+Name=Paste with mcopy
 Icon=edit-paste
 Exec="{}" paste %d
 "#,
@@ -472,10 +472,10 @@ Exec="{}" paste %d
         Ok(())
     }
 
-    fn install_thunar_actions(home: &str, exe_path: &str) -> anyhow::Result<()> {
-        // Thunar uses uca.xml which is more complex to edit programmatically
-        // Provide instructions instead
-        println!("  Thunar: Manuel kurulum gerekli");
+    fn install_thunar_actions(exe_path: &str) -> anyhow::Result<()> {
+        // Thunar uses `uca.xml`, which is harder to edit programmatically.
+        // Print setup guidance instead.
+        println!("  Thunar: manual setup required");
         println!("    1. Edit > Configure custom actions");
         println!(
             "    2. Add: Name='mcopy Copy', Command='{} copy %f'",
@@ -504,10 +504,10 @@ pub use linux_impl::{install_context_menu, uninstall_context_menu};
 // Fallback for unsupported platforms
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub fn install_context_menu(_exe_path: &Path) -> anyhow::Result<()> {
-    anyhow::bail!("Bu platform için context menu entegrasyonu desteklenmiyor")
+    anyhow::bail!("Context menu integration is not supported on this platform")
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub fn uninstall_context_menu() -> anyhow::Result<()> {
-    anyhow::bail!("Bu platform için context menu entegrasyonu desteklenmiyor")
+    anyhow::bail!("Context menu integration is not supported on this platform")
 }

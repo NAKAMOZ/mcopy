@@ -8,10 +8,10 @@ use std::sync::{
 use std::time::Duration;
 use tokio::fs;
 
-/// Kopyalama işi için kooperatif kontrol mekanizması.
+/// Cooperative control for copy operations.
 ///
-/// Mevcut dosya kopyalama algoritmasını değiştirmeden, yeni işlerin başlatılmasını
-/// durdurmak veya kalan kuyruğu iptal etmek için kullanılır.
+/// This lets the app pause new work or cancel the remaining queue without
+/// rewriting the underlying file-copy algorithm.
 #[derive(Clone, Default)]
 pub struct CopyController {
     paused: Arc<AtomicBool>,
@@ -65,9 +65,9 @@ pub enum ProgressPhase {
     Failed,
 }
 
-/// İlerleme güncellemesi.
+/// Progress update.
 ///
-/// `processed_files`, başarılı veya hatalı tamamlanan dosya sayısını temsil eder.
+/// `processed_files` counts both successful and failed files.
 #[derive(Clone, Debug)]
 pub struct ProgressUpdate {
     pub phase: ProgressPhase,
@@ -76,35 +76,36 @@ pub struct ProgressUpdate {
     pub file_bytes: u64,
 }
 
-/// Progress callback türü.
+/// Progress callback type.
 pub type ProgressCallback = Box<dyn Fn(ProgressUpdate) + Send + Sync>;
 
-/// Dosyaları recursive olarak topla (hem dosya hem klasör destekler)
+/// Collect files recursively from a file or directory source.
 pub async fn collect_files(
     src_root: &Path,
     dst_root: &Path,
 ) -> anyhow::Result<Vec<(PathBuf, PathBuf)>> {
-    // Kaynak dosya mı klasör mü kontrol et
+    // Check whether the source is a file or a directory.
     let metadata = fs::metadata(src_root).await?;
 
-    // Tek dosya ise direkt kopyala
+    // Copy a single file directly.
     if metadata.is_file() {
         let file_name = src_root
             .file_name()
-            .ok_or_else(|| anyhow::anyhow!("Dosya ismi okunamadı"))?;
+            .ok_or_else(|| anyhow::anyhow!("Could not read the file name"))?;
         let dst_path = dst_root.join(file_name);
         return Ok(vec![(src_root.to_path_buf(), dst_path)]);
     }
 
-    // Klasör ise recursive olarak topla
+    // Walk directory contents recursively.
     let mut result = Vec::new();
     let mut stack: Vec<(PathBuf, PathBuf)> = Vec::new();
 
-    // Kaynak root klasörün ismini al
-    // Disk kökü (örn: D:\) için file_name() None döner, bu durumda doğrudan dst_root kullan
+    // Preserve the source root name when available.
+    // For drive roots such as `D:\`, `file_name()` returns `None`, so we use
+    // the target root directly.
     let initial_dst = match src_root.file_name() {
         Some(src_name) => dst_root.join(src_name),
-        None => dst_root.to_path_buf(), // Disk kökü - doğrudan hedef klasöre kopyala
+        None => dst_root.to_path_buf(),
     };
 
     stack.push((src_root.to_path_buf(), initial_dst));
@@ -119,13 +120,13 @@ pub async fn collect_files(
             if file_type.is_dir() {
                 let name = entry_path
                     .file_name()
-                    .ok_or_else(|| anyhow::anyhow!("Alt klasör ismi okunamadı"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Could not read the subdirectory name"))?;
                 let dst_sub = current_dst.join(name);
                 stack.push((entry_path, dst_sub));
             } else if file_type.is_file() {
                 let name = entry_path
                     .file_name()
-                    .ok_or_else(|| anyhow::anyhow!("Dosya ismi okunamadı"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Could not read the file name"))?;
                 let dst_file_path = current_dst.join(name);
                 result.push((entry_path, dst_file_path));
             }
@@ -135,7 +136,7 @@ pub async fn collect_files(
     Ok(result)
 }
 
-/// Hedef klasörleri önceden oluştur (optimizasyon)
+/// Create destination directories ahead of time.
 pub async fn precreate_directories(files: &[(PathBuf, PathBuf)]) -> anyhow::Result<()> {
     let unique_dirs: HashSet<PathBuf> = files
         .iter()
@@ -155,7 +156,7 @@ pub async fn precreate_directories(files: &[(PathBuf, PathBuf)]) -> anyhow::Resu
     Ok(())
 }
 
-/// Optimal concurrency hesapla
+/// Resolve the optimal concurrency.
 pub fn calculate_concurrency(user_override: Option<usize>) -> usize {
     if let Some(n) = user_override {
         return n.max(1);
@@ -164,7 +165,7 @@ pub fn calculate_concurrency(user_override: Option<usize>) -> usize {
     (cores * 4).clamp(4, 128)
 }
 
-/// Windows UNC path prefix'ini kaldır (\\?\C:\... -> C:\...)
+/// Strip the Windows UNC path prefix (`\\?\C:\... -> C:\...`).
 pub fn normalize_path(path: PathBuf) -> PathBuf {
     let path_str = path.to_string_lossy();
     if let Some(stripped) = path_str.strip_prefix(r"\\?\") {
@@ -174,7 +175,7 @@ pub fn normalize_path(path: PathBuf) -> PathBuf {
     }
 }
 
-/// Dosyaları progress callback ile kopyala
+/// Copy files while emitting progress callbacks.
 pub async fn copy_files_with_progress(
     files: Vec<(PathBuf, PathBuf)>,
     concurrency: usize,
@@ -202,7 +203,7 @@ pub async fn copy_files_with_progress(
                 return;
             }
 
-            // Dosya adını başta belirle ki hata durumunda da UI güncellenebilsin.
+            // Capture the file name early so failures can still update the UI.
             let file_name = src
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -218,11 +219,11 @@ pub async fn copy_files_with_progress(
                 });
             }
 
-            // Dosya boyutunu al
+            // Resolve the file size before copying.
             let file_size = match fs::metadata(&src).await {
                 Ok(meta) => meta.len(),
                 Err(e) => {
-                    eprintln!("HATA: {:?} metadata okunamadı | {}", src, e);
+                    eprintln!("ERROR: failed to read metadata for {:?} | {}", src, e);
 
                     let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
                     if let Some(cb) = callback {
@@ -238,7 +239,7 @@ pub async fn copy_files_with_progress(
                 }
             };
 
-            // Dosyayı kopyala
+            // Copy the file.
             match fs::copy(&src, &dst).await {
                 Ok(_) => {
                     let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
@@ -253,7 +254,7 @@ pub async fn copy_files_with_progress(
                     }
                 }
                 Err(e) => {
-                    eprintln!("HATA: {:?} -> {:?} | {}", src, dst, e);
+                    eprintln!("ERROR: {:?} -> {:?} | {}", src, dst, e);
 
                     let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
                     if let Some(cb) = callback {

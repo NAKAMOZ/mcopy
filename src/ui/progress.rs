@@ -17,7 +17,6 @@ struct CopyProgressState {
     failed_files: usize,
     active_files: usize,
     total_files: usize,
-    current_file_bytes: u64,
     terminal_state: Option<TerminalState>,
     terminal_since: Option<Instant>,
 }
@@ -34,7 +33,6 @@ pub(crate) struct CopyProgressSnapshot {
     pub failed_files: usize,
     pub active_files: usize,
     pub total_files: usize,
-    pub current_file_bytes: u64,
     terminal_state: Option<TerminalState>,
     pub should_auto_close: bool,
 }
@@ -48,7 +46,6 @@ impl CopyProgress {
                 failed_files: 0,
                 active_files: 0,
                 total_files,
-                current_file_bytes: 0,
                 terminal_state: None,
                 terminal_since: None,
             })),
@@ -59,7 +56,6 @@ impl CopyProgress {
         let mut state = self.state.lock().unwrap();
 
         state.current_file = update.file_name;
-        state.current_file_bytes = update.file_bytes;
 
         match update.phase {
             ProgressPhase::Started => {
@@ -95,7 +91,6 @@ impl CopyProgress {
             failed_files: state.failed_files,
             active_files: state.active_files,
             total_files: state.total_files,
-            current_file_bytes: state.current_file_bytes,
             terminal_state: state.terminal_state,
             should_auto_close: state
                 .terminal_since
@@ -119,11 +114,6 @@ impl CopyProgressSnapshot {
         (self.completed_files + self.failed_files).min(self.total_files)
     }
 
-    pub fn remaining_files(&self) -> usize {
-        self.total_files
-            .saturating_sub(self.processed_files() + self.active_files)
-    }
-
     pub fn percent(&self) -> f32 {
         if self.total_files == 0 {
             return 0.0;
@@ -136,101 +126,16 @@ impl CopyProgressSnapshot {
         self.terminal_state.is_some()
     }
 
-    pub fn title(&self, controller: &CopyController) -> String {
-        match self.terminal_state {
-            Some(TerminalState::Completed) => "Kopyalama tamamlandi".to_string(),
-            Some(TerminalState::Cancelled) => "Kopyalama durduruldu".to_string(),
-            None if controller.is_cancelled() => {
-                if self.active_files > 0 {
-                    "Durduruluyor".to_string()
-                } else {
-                    "Durdurma istegi alindi".to_string()
-                }
-            }
-            None if controller.is_paused() => {
-                if self.active_files > 0 {
-                    "Duraklatiliyor".to_string()
-                } else {
-                    "Duraklatildi".to_string()
-                }
-            }
-            None if self.processed_files() == 0 && self.active_files == 0 => {
-                "Hazirlaniyor".to_string()
-            }
-            None => "Kopyalaniyor".to_string(),
-        }
-    }
-
-    pub fn subtitle(&self, controller: &CopyController) -> String {
-        match self.terminal_state {
-            Some(TerminalState::Completed) => {
-                if self.failed_files > 0 {
-                    format!(
-                        "{} dosya kopyalandi, {} dosyada hata olustu",
-                        self.completed_files, self.failed_files
-                    )
-                } else {
-                    format!("{} dosya basariyla kopyalandi", self.completed_files)
-                }
-            }
-            Some(TerminalState::Cancelled) => format!(
-                "{} dosya islendi, {} dosya sirada kaldi",
-                self.processed_files(),
-                self.remaining_files()
-            ),
-            None if controller.is_cancelled() => {
-                if self.active_files > 0 {
-                    format!(
-                        "{} aktif is tamamlaninca kalan kuyruk duracak",
-                        self.active_files
-                    )
-                } else {
-                    "Yeni is baslatilmiyor".to_string()
-                }
-            }
-            None if controller.is_paused() => {
-                if self.active_files > 0 {
-                    format!(
-                        "{} aktif is guvenli sekilde tamamlaniyor",
-                        self.active_files
-                    )
-                } else {
-                    format!("{} dosya beklemede", self.remaining_files())
-                }
-            }
-            None if self.processed_files() == 0 && self.active_files == 0 => {
-                "Klasor yapisi ve kuyruk hazirlaniyor".to_string()
-            }
-            None if self.active_files > 0 => format!(
-                "{} aktif is, {} dosya sirada",
-                self.active_files,
-                self.remaining_files()
-            ),
-            None => format!("{} dosya islendi", self.processed_files()),
-        }
-    }
-
-    pub fn accent(&self, controller: &CopyController) -> u32 {
-        match self.terminal_state {
-            Some(TerminalState::Completed) => 0x34d399,
-            Some(TerminalState::Cancelled) => 0xfb923c,
-            None if controller.is_cancelled() => 0xf97316,
-            None if controller.is_paused() => 0xfbbf24,
-            None if self.processed_files() == 0 && self.active_files == 0 => 0x60a5fa,
-            None => 0x38bdf8,
-        }
-    }
-
     pub fn window_title(&self, controller: &CopyController) -> String {
         match self.terminal_state {
-            Some(TerminalState::Completed) => "mcopy - Tamamlandi".to_string(),
-            Some(TerminalState::Cancelled) => "mcopy - Durduruldu".to_string(),
-            None if controller.is_cancelled() => "mcopy - Durduruluyor".to_string(),
-            None if controller.is_paused() => "mcopy - Duraklatildi".to_string(),
+            Some(TerminalState::Completed) => "mcopy - Completed".to_string(),
+            Some(TerminalState::Cancelled) => "mcopy - Cancelled".to_string(),
+            None if controller.is_cancelled() => "mcopy - Cancelling".to_string(),
+            None if controller.is_paused() => "mcopy - Paused".to_string(),
             None if self.processed_files() == 0 && self.active_files == 0 => {
-                "mcopy - Hazirlaniyor".to_string()
+                "mcopy - Preparing".to_string()
             }
-            None => "mcopy - Kopyalaniyor".to_string(),
+            None => "mcopy - Copying".to_string(),
         }
     }
 }

@@ -1,4 +1,4 @@
-// Release build'de terminal penceresi gösterme (Windows)
+// Hide the terminal window in Windows release builds.
 #![cfg_attr(
     all(target_os = "windows", not(debug_assertions)),
     windows_subsystem = "windows"
@@ -13,59 +13,59 @@ mod clipboard;
 mod context_menu;
 mod ui;
 
-// lib.rs'teki fonksiyonları kullan
+// Reuse the shared copy pipeline from lib.rs.
 use mcopy::{
     CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
     copy_files_with_progress, normalize_path, precreate_directories,
 };
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Asenkron klasör kopyalama aracı")]
+#[command(author, version, about = "Asynchronous file and folder copy tool")]
 struct Args {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Kaynak klasör (legacy mode)
+    /// Source folder (legacy mode)
     src: Option<PathBuf>,
 
-    /// Hedef klasör (legacy mode)
+    /// Target folder (legacy mode)
     dst: Option<PathBuf>,
 
-    /// Eşzamanlı işlem sayısı
+    /// Number of concurrent copy tasks
     #[arg(long, short = 'j')]
     concurrency: Option<usize>,
 
-    /// Progress bar'ı kapat
+    /// Disable the terminal progress bars
     #[arg(long)]
     no_progress: bool,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Registry'ye context menu ekle (admin gerekli)
+    /// Install the context menu into the registry (requires admin)
     Install,
 
-    /// Registry'den context menu sil (admin gerekli)
+    /// Remove the context menu from the registry (requires admin)
     Uninstall,
 
-    /// Clipboard'a path kopyala
+    /// Copy paths into the clipboard
     Copy {
-        /// Kopyalanacak dosya/klasörler
+        /// Files or folders to copy
         #[arg(required = true)]
         paths: Vec<PathBuf>,
 
-        /// Mevcut clipboard'a ekle (çoklu seçim için)
+        /// Append to the existing clipboard payload
         #[arg(long, short)]
         append: bool,
     },
 
-    /// Clipboard'tan oku ve hedef klasöre kopyala
+    /// Read clipboard paths and copy them into the target folder
     Paste {
-        /// Hedef klasör
+        /// Target folder
         target: PathBuf,
     },
 
-    /// Clipboard'ı temizle
+    /// Clear the clipboard payload
     Clear,
 }
 
@@ -75,33 +75,33 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command {
         Some(Commands::Install) => {
-            // Admin kontrolü
+            // Admin check
             require_admin()?;
 
-            // Exe path'i al
+            // Resolve the executable path
             let exe = std::env::current_exe()?;
             println!("Exe path: {:?}", exe);
 
-            // Context menu kur
+            // Install the context menu
             context_menu::install_context_menu(&exe)?;
         }
 
         Some(Commands::Uninstall) => {
-            // Admin kontrolü
+            // Admin check
             require_admin()?;
 
-            // Context menu kaldır
+            // Remove the context menu
             context_menu::uninstall_context_menu()?;
         }
 
         Some(Commands::Copy { paths, append }) => {
-            // Clipboard'a path(ler) kopyala
+            // Copy the selected path(s) to the clipboard
             if append {
                 clipboard::append_paths_to_clipboard(&paths)?;
             } else {
                 clipboard::copy_paths_to_clipboard(&paths)?;
             }
-            // Sessiz çalış - context menu'den çağrıldığında output yok
+            // Stay quiet when invoked from the context menu.
         }
 
         Some(Commands::Clear) => {
@@ -109,22 +109,22 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Some(Commands::Paste { target }) => {
-            // Path'i normalize et (Windows UNC prefix kaldır)
+            // Normalize the path by stripping the Windows UNC prefix when needed.
             let target = normalize_path(target);
 
-            // Hedef klasör yoksa oluştur
+            // Create the target folder if it does not exist yet.
             if !target.exists() {
                 std::fs::create_dir_all(&target)?;
             }
 
-            // Clipboard'tan paths oku
+            // Read source paths from the clipboard.
             let sources = clipboard::paste_paths_from_clipboard()?;
 
             if sources.is_empty() {
-                return Ok(()); // Sessizce çık
+                return Ok(()); // Exit quietly.
             }
 
-            // Önce tüm dosyaları topla
+            // Collect all files before opening the UI.
             let mut all_files = Vec::new();
             for src in &sources {
                 let files = collect_files(src, &target).await?;
@@ -135,18 +135,18 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
 
-            // Progress durumunu oluştur
+            // Build the shared progress state.
             let progress = ui::CopyProgress::new(all_files.len());
             let controller = CopyController::new();
             let progress_clone = progress.clone();
             let controller_clone = controller.clone();
 
-            // UI thread'i başlat
+            // Start the UI thread.
             let ui_thread = std::thread::spawn(move || {
                 ui::show_progress_window(progress_clone, controller_clone);
             });
 
-            // Klasörleri oluştur
+            // Pre-create destination folders.
             precreate_directories(&all_files).await?;
 
             if controller.is_cancelled() {
@@ -155,13 +155,13 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
 
-            // Progress callback oluştur
+            // Bridge copy updates into the UI state.
             let progress_for_callback = progress.clone();
             let callback = Box::new(move |update: ProgressUpdate| {
                 progress_for_callback.apply(update);
             });
 
-            // Kopyala
+            // Start copying.
             let concurrency = calculate_concurrency(None);
             copy_files_with_progress(
                 all_files,
@@ -184,35 +184,35 @@ async fn main() -> anyhow::Result<()> {
             // Legacy CLI mode
             let src = args
                 .src
-                .ok_or_else(|| anyhow::anyhow!("Kaynak klasör gerekli"))?;
+                .ok_or_else(|| anyhow::anyhow!("Source folder is required"))?;
             let dst = args
                 .dst
-                .ok_or_else(|| anyhow::anyhow!("Hedef klasör gerekli"))?;
+                .ok_or_else(|| anyhow::anyhow!("Target folder is required"))?;
 
-            println!("Kaynak: {:?}", src);
-            println!("Hedef:  {:?}", dst);
+            println!("Source: {:?}", src);
+            println!("Target: {:?}", dst);
 
             let start = Instant::now();
 
-            // Dosyaları topla
+            // Collect the files.
             let files = collect_files(&src, &dst).await?;
-            println!("Toplam dosya: {}", files.len());
+            println!("Total files: {}", files.len());
 
-            // Klasörleri oluştur
+            // Pre-create destination folders.
             precreate_directories(&files).await?;
 
-            // Concurrency hesapla
+            // Resolve concurrency.
             let concurrency = calculate_concurrency(args.concurrency);
-            println!("Eşzamanlılık: {}", concurrency);
+            println!("Concurrency: {}", concurrency);
 
-            // Progress bar'ları hazırla (legacy indicatif)
+            // Set up the legacy terminal progress bars.
             if !args.no_progress {
                 let multi = MultiProgress::new();
                 let overall = multi.add(ProgressBar::new(files.len() as u64));
                 overall.set_style(
                     ProgressStyle::default_bar()
                         .template(
-                            "[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} dosya ({percent}%)",
+                            "[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%)",
                         )
                         .unwrap()
                         .progress_chars("=>-"),
@@ -225,57 +225,57 @@ async fn main() -> anyhow::Result<()> {
                         .unwrap(),
                 );
 
-                // Clone for closure
+                // Clone handles for the callback.
                 let current_clone = current.clone();
                 let overall_clone = overall.clone();
 
-                // Callback oluştur
+                // Feed progress updates into indicatif.
                 let callback = Box::new(move |update: ProgressUpdate| match update.phase {
                     ProgressPhase::Started => {
-                        current_clone.set_message(format!("Kopyalanıyor: {}", update.file_name));
+                        current_clone.set_message(format!("Copying: {}", update.file_name));
                     }
                     ProgressPhase::Finished => {
-                        current_clone.set_message(format!("Tamamlandı: {}", update.file_name));
+                        current_clone.set_message(format!("Completed: {}", update.file_name));
                         overall_clone.set_position(update.processed_files as u64);
                     }
                     ProgressPhase::Failed => {
-                        current_clone.set_message(format!("Atlandı/Hata: {}", update.file_name));
+                        current_clone.set_message(format!("Skipped/Failed: {}", update.file_name));
                         overall_clone.set_position(update.processed_files as u64);
                     }
                 });
 
-                // Kopyala
+                // Copy files.
                 copy_files_with_progress(files, concurrency, Some(callback), None).await?;
 
-                overall.finish_with_message("Kopyalama tamamlandı!");
+                overall.finish_with_message("Copy completed!");
                 current.finish_and_clear();
             } else {
-                // Progress yok
+                // Copy without terminal progress bars.
                 copy_files_with_progress(files, concurrency, None, None).await?;
             }
 
             let elapsed = start.elapsed();
-            println!("\nToplam süre: {:.2?}", elapsed);
+            println!("\nTotal time: {:.2?}", elapsed);
         }
     }
 
     Ok(())
 }
 
-/// Admin yetkisi kontrolü (sadece Windows için gerekli)
+/// Admin privilege check used only on Windows.
 #[cfg(target_os = "windows")]
 fn require_admin() -> anyhow::Result<()> {
     if !is_elevated::is_elevated() {
         anyhow::bail!(
-            "Admin yetkisi gerekli. PowerShell'i 'Run as Administrator' ile açın ve tekrar deneyin."
+            "Administrator privileges are required. Open PowerShell with 'Run as Administrator' and try again."
         );
     }
     Ok(())
 }
 
-/// Unix sistemlerde admin kontrolü (sudo ile çalıştırılması önerilir ama zorunlu değil)
+/// Admin checks are not required on Unix-like systems.
 #[cfg(not(target_os = "windows"))]
 fn require_admin() -> anyhow::Result<()> {
-    // Unix'te genelde sudo gerekli değil, kullanıcı home dizinine yazıyoruz
+    // On Unix we usually write into the current user's home directory.
     Ok(())
 }

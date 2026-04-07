@@ -1,4 +1,4 @@
 fn main() {
-    // GPUI kendi manifest'ini embed ettiği için burada embed etmiyoruz
-    // Aksi halde "duplicate resource" hatası alınır
+    // GPUI already embeds its own manifest.
+    // Doing it again here would cause a duplicate resource error.
 }
