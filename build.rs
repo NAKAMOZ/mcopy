@@ -1,4 +1,6 @@
 fn main() {
-    // GPUI already embeds its own manifest.
-    // Doing it again here would cause a duplicate resource error.
+    #[cfg(windows)]
+    {
+        embed_resource::compile("mcopy.rc", embed_resource::NONE);
+    }
 }

@@ -1,13 +1,51 @@
 use std::path::Path;
 
+pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ContextMenuInstallState {
+    NotInstalled,
+    Installed { version: Option<String> },
+}
+
+impl ContextMenuInstallState {
+    pub fn is_current_version(&self) -> bool {
+        matches!(
+            self,
+            Self::Installed { version: Some(version) } if version == CURRENT_VERSION
+        )
+    }
+}
+
+pub fn install_or_update_context_menu(exe_path: &Path) -> anyhow::Result<()> {
+    if context_menu_install_state()?.is_current_version() {
+        return Ok(());
+    }
+
+    uninstall_context_menu()?;
+    install_context_menu(exe_path)
+}
+
 // ============================================================================
 // Windows Implementation
 // ============================================================================
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::*;
+    use super::{CURRENT_VERSION, ContextMenuInstallState};
+    use std::path::Path;
     use winreg::RegKey;
     use winreg::enums::*;
+
+    const VERSION_VALUE: &str = "mcopyVersion";
+    const EXE_PATH_VALUE: &str = "mcopyExePath";
+    const MENU_PATHS: &[&str] = &[
+        r"SOFTWARE\Classes\*\shell\mcopy_copy",
+        r"SOFTWARE\Classes\Directory\shell\mcopy_copy",
+        r"SOFTWARE\Classes\Directory\shell\mcopy_paste",
+        r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste",
+        r"SOFTWARE\Classes\Drive\shell\mcopy_paste",
+    ];
+    const PRIMARY_MENU_PATH: &str = r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste";
 
     /// Install the context menu into the registry.
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
@@ -59,6 +97,7 @@ mod windows_impl {
         let path = r"SOFTWARE\Classes\*\shell\mcopy_copy";
         let (key, _) = hklm.create_subkey(path)?;
         key.set_value("", &"Copy with mcopy")?;
+        write_metadata(&key, exe_path)?;
         // Explorer invokes the command once per selected item; `--append`
         // lets every invocation extend the shared clipboard session.
         key.set_value("MultiSelectModel", &"Player")?;
@@ -75,6 +114,7 @@ mod windows_impl {
         let path = r"SOFTWARE\Classes\Directory\shell\mcopy_copy";
         let (key, _) = hklm.create_subkey(path)?;
         key.set_value("", &"Copy with mcopy")?;
+        write_metadata(&key, exe_path)?;
         // Explorer invokes the command once per selected folder.
         key.set_value("MultiSelectModel", &"Player")?;
 
@@ -90,6 +130,7 @@ mod windows_impl {
         let path = r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
         key.set_value("", &"Paste with mcopy")?;
+        write_metadata(&key, exe_path)?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%V\"", exe_path))?;
@@ -102,6 +143,7 @@ mod windows_impl {
         let path = r"SOFTWARE\Classes\Directory\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
         key.set_value("", &"Paste here with mcopy")?;
+        write_metadata(&key, exe_path)?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%1\"", exe_path))?;
@@ -114,11 +156,43 @@ mod windows_impl {
         let path = r"SOFTWARE\Classes\Drive\shell\mcopy_paste";
         let (key, _) = hklm.create_subkey(path)?;
         key.set_value("", &"Paste with mcopy")?;
+        write_metadata(&key, exe_path)?;
 
         let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", path))?;
         cmd_key.set_value("", &format!("\"{}\" paste \"%1\"", exe_path))?;
 
         Ok(())
+    }
+
+    pub fn context_menu_install_state() -> anyhow::Result<ContextMenuInstallState> {
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+
+        if let Ok(key) = hklm.open_subkey_with_flags(PRIMARY_MENU_PATH, KEY_READ) {
+            return Ok(ContextMenuInstallState::Installed {
+                version: read_version(&key),
+            });
+        }
+
+        for path in MENU_PATHS {
+            if hklm.open_subkey_with_flags(path, KEY_READ).is_ok() {
+                return Ok(ContextMenuInstallState::Installed { version: None });
+            }
+        }
+
+        Ok(ContextMenuInstallState::NotInstalled)
+    }
+
+    fn write_metadata(key: &RegKey, exe_path: &str) -> anyhow::Result<()> {
+        key.set_value(VERSION_VALUE, &CURRENT_VERSION)?;
+        key.set_value(EXE_PATH_VALUE, &exe_path)?;
+        key.set_value("Icon", &format!("\"{}\",0", exe_path))?;
+        Ok(())
+    }
+
+    fn read_version(key: &RegKey) -> Option<String> {
+        key.get_value::<String, _>(VERSION_VALUE)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
     }
 
     /// Delete a single menu entry if it exists.
@@ -140,11 +214,13 @@ mod windows_impl {
 // ============================================================================
 #[cfg(target_os = "macos")]
 mod macos_impl {
-    use super::*;
+    use super::{CURRENT_VERSION, ContextMenuInstallState};
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     const SERVICES_DIR: &str = "Library/Services";
+    const SUPPORT_DIR: &str = "Library/Application Support/mcopy";
+    const VERSION_FILE: &str = "install-version";
 
     /// Install macOS Finder Services.
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
@@ -163,6 +239,8 @@ mod macos_impl {
 
         // mcopy Paste workflow
         create_automator_workflow(&services_dir, "mcopy Paste", exe_str, "paste")?;
+
+        write_install_metadata(&home)?;
 
         println!("✓ Finder Services installed successfully!");
         println!("  Location: {}", services_dir.display());
@@ -186,8 +264,50 @@ mod macos_impl {
             fs::remove_dir_all(&paste_workflow)?;
         }
 
+        remove_install_metadata(&home)?;
+
         println!("✓ Finder Services removed successfully!");
         Ok(())
+    }
+
+    pub fn context_menu_install_state() -> anyhow::Result<ContextMenuInstallState> {
+        let home = std::env::var("HOME")?;
+        let version_path = version_file_path(&home);
+
+        if let Ok(version) = fs::read_to_string(&version_path) {
+            let version = version.trim().to_string();
+            if !version.is_empty() {
+                return Ok(ContextMenuInstallState::Installed {
+                    version: Some(version),
+                });
+            }
+        }
+
+        let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
+        let copy_workflow = services_dir.join("mcopy Copy.workflow");
+        let paste_workflow = services_dir.join("mcopy Paste.workflow");
+
+        if copy_workflow.exists() || paste_workflow.exists() {
+            return Ok(ContextMenuInstallState::Installed { version: None });
+        }
+
+        Ok(ContextMenuInstallState::NotInstalled)
+    }
+
+    fn write_install_metadata(home: &str) -> anyhow::Result<()> {
+        let support_dir = PathBuf::from(home).join(SUPPORT_DIR);
+        fs::create_dir_all(&support_dir)?;
+        fs::write(support_dir.join(VERSION_FILE), CURRENT_VERSION)?;
+        Ok(())
+    }
+
+    fn remove_install_metadata(home: &str) -> anyhow::Result<()> {
+        let _ = fs::remove_file(version_file_path(home));
+        Ok(())
+    }
+
+    fn version_file_path(home: &str) -> PathBuf {
+        PathBuf::from(home).join(SUPPORT_DIR).join(VERSION_FILE)
     }
 
     fn create_automator_workflow(
@@ -364,10 +484,13 @@ mod macos_impl {
 // ============================================================================
 #[cfg(target_os = "linux")]
 mod linux_impl {
-    use super::*;
+    use super::{CURRENT_VERSION, ContextMenuInstallState};
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+
+    const SUPPORT_DIR: &str = ".local/share/mcopy";
+    const VERSION_FILE: &str = "install-version";
 
     /// Install Linux file manager integration (Nautilus, Dolphin, Thunar).
     pub fn install_context_menu(exe_path: &Path) -> anyhow::Result<()> {
@@ -384,6 +507,8 @@ mod linux_impl {
 
         // Thunar (XFCE) custom actions.
         install_thunar_actions(exe_str)?;
+
+        write_install_metadata(&home)?;
 
         println!("✓ File manager integration installed successfully!");
         Ok(())
@@ -406,7 +531,51 @@ mod linux_impl {
         println!("✓ Nautilus and Dolphin integration removed!");
         println!("  Note: Remove the Thunar actions manually from Edit > Configure custom actions");
 
+        remove_install_metadata(&home)?;
+
         Ok(())
+    }
+
+    pub fn context_menu_install_state() -> anyhow::Result<ContextMenuInstallState> {
+        let home = std::env::var("HOME")?;
+        let version_path = version_file_path(&home);
+
+        if let Ok(version) = fs::read_to_string(&version_path) {
+            let version = version.trim().to_string();
+            if !version.is_empty() {
+                return Ok(ContextMenuInstallState::Installed {
+                    version: Some(version),
+                });
+            }
+        }
+
+        let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
+        let dolphin_dir = PathBuf::from(&home).join(".local/share/kservices5/ServiceMenus");
+
+        if nautilus_dir.join("mcopy-copy").exists()
+            || nautilus_dir.join("mcopy-paste").exists()
+            || dolphin_dir.join("mcopy.desktop").exists()
+        {
+            return Ok(ContextMenuInstallState::Installed { version: None });
+        }
+
+        Ok(ContextMenuInstallState::NotInstalled)
+    }
+
+    fn write_install_metadata(home: &str) -> anyhow::Result<()> {
+        let support_dir = PathBuf::from(home).join(SUPPORT_DIR);
+        fs::create_dir_all(&support_dir)?;
+        fs::write(support_dir.join(VERSION_FILE), CURRENT_VERSION)?;
+        Ok(())
+    }
+
+    fn remove_install_metadata(home: &str) -> anyhow::Result<()> {
+        let _ = fs::remove_file(version_file_path(home));
+        Ok(())
+    }
+
+    fn version_file_path(home: &str) -> PathBuf {
+        PathBuf::from(home).join(SUPPORT_DIR).join(VERSION_FILE)
     }
 
     fn install_nautilus_scripts(home: &str, exe_path: &str) -> anyhow::Result<()> {
@@ -493,18 +662,23 @@ Exec="{}" paste %d
 // Public API - Platform-agnostic exports
 // ============================================================================
 #[cfg(target_os = "windows")]
-pub use windows_impl::{install_context_menu, uninstall_context_menu};
+pub use windows_impl::{context_menu_install_state, install_context_menu, uninstall_context_menu};
 
 #[cfg(target_os = "macos")]
-pub use macos_impl::{install_context_menu, uninstall_context_menu};
+pub use macos_impl::{context_menu_install_state, install_context_menu, uninstall_context_menu};
 
 #[cfg(target_os = "linux")]
-pub use linux_impl::{install_context_menu, uninstall_context_menu};
+pub use linux_impl::{context_menu_install_state, install_context_menu, uninstall_context_menu};
 
 // Fallback for unsupported platforms
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub fn install_context_menu(_exe_path: &Path) -> anyhow::Result<()> {
     anyhow::bail!("Context menu integration is not supported on this platform")
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn context_menu_install_state() -> anyhow::Result<ContextMenuInstallState> {
+    Ok(ContextMenuInstallState::NotInstalled)
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]

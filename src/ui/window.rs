@@ -4,13 +4,32 @@ use super::constants::{
 };
 use super::progress::CopyProgress;
 use super::widgets::{
-    action_button, controls_row, counter_display, drag_region, file_name_row, header_row,
-    message_banner, progress_bar, status_text, surface_card,
+    action_button, brand_mark, controls_row, counter_display, drag_region, file_name_row,
+    header_row, message_banner, progress_bar, status_text, surface_card,
 };
-use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use mcopy::CopyController;
+use std::borrow::Cow;
 use std::time::Duration;
+
+struct ProgressAssets;
+
+impl AssetSource for ProgressAssets {
+    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
+        Ok(match path {
+            "logo.svg" => Some(Cow::Borrowed(include_bytes!("../../logo.svg"))),
+            _ => None,
+        })
+    }
+
+    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
+        Ok(if path.is_empty() {
+            vec![SharedString::from("logo.svg")]
+        } else {
+            Vec::new()
+        })
+    }
+}
 
 pub struct ProgressWindow {
     progress: CopyProgress,
@@ -127,40 +146,57 @@ impl Render for ProgressWindow {
             move |_, _, _| cancel_controller.cancel(),
         );
 
-        surface_card().size_full().font_family("Inter").child(
-            div()
-                .w_full()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .px_6()
-                .py_5()
-                .child(drag_region(
-                    div()
-                        .w_full()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
-                        .child(header_row(
-                            status_text(visual.status_label.to_string(), visual.status_color),
-                            counter_display(
-                                snapshot.processed_files(),
-                                snapshot.total_files,
-                                visual.counter_primary_color,
-                                visual.counter_secondary_color,
-                            ),
-                        ))
-                        .child(progress_bar(snapshot.percent(), visual.progress_fill))
-                        .child(file_name_row(file_display)),
-                ))
-                .when(snapshot.failed_files > 0, |this| {
-                    this.child(message_banner(format!(
-                        "{} files failed while the queue continued.",
-                        snapshot.failed_files
-                    )))
-                })
-                .child(controls_row(cancel_button, primary_button)),
-        )
+        let message = if snapshot.failed_files > 0 {
+            format!(
+                "{} files failed while the queue continued.",
+                snapshot.failed_files
+            )
+        } else {
+            String::new()
+        };
+
+        surface_card()
+            .w(px(WINDOW_WIDTH))
+            .h(px(WINDOW_HEIGHT))
+            .font_family("Inter")
+            .child(
+                div()
+                    .w_full()
+                    .h_full()
+                    .flex()
+                    .flex_col()
+                    .justify_between()
+                    .px_6()
+                    .py_5()
+                    .child(drag_region(
+                        div()
+                            .w_full()
+                            .flex()
+                            .flex_col()
+                            .gap_3()
+                            .child(header_row(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(brand_mark())
+                                    .child(status_text(
+                                        visual.status_label.to_string(),
+                                        visual.status_color,
+                                    )),
+                                counter_display(
+                                    snapshot.processed_files(),
+                                    snapshot.total_files,
+                                    visual.counter_primary_color,
+                                    visual.counter_secondary_color,
+                                ),
+                            ))
+                            .child(progress_bar(snapshot.percent(), visual.progress_fill))
+                            .child(file_name_row(file_display)),
+                    ))
+                    .child(message_banner(message))
+                    .child(controls_row(cancel_button, primary_button)),
+            )
     }
 }
 
@@ -240,28 +276,30 @@ fn resolve_visual_state(
 }
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
-    Application::new().run(move |cx| {
-        let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: None,
-            focus: true,
-            show: true,
-            kind: WindowKind::PopUp,
-            is_resizable: false,
-            is_minimizable: false,
-            window_background: WindowBackgroundAppearance::Transparent,
-            window_decorations: Some(WindowDecorations::Client),
-            ..Default::default()
-        };
+    Application::new()
+        .with_assets(ProgressAssets)
+        .run(move |cx| {
+            let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: None,
+                focus: true,
+                show: true,
+                kind: WindowKind::PopUp,
+                is_resizable: false,
+                is_minimizable: false,
+                window_background: WindowBackgroundAppearance::Transparent,
+                window_decorations: Some(WindowDecorations::Client),
+                ..Default::default()
+            };
 
-        cx.open_window(options, move |_, cx| {
-            let progress = progress.clone();
-            let controller = controller.clone();
-            cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
-        })
-        .unwrap();
+            cx.open_window(options, move |_, cx| {
+                let progress = progress.clone();
+                let controller = controller.clone();
+                cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
+            })
+            .unwrap();
 
-        cx.activate(true);
-    });
+            cx.activate(true);
+        });
 }

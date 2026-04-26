@@ -2,6 +2,7 @@ use std::time::Duration;
 
 pub const WINDOW_WIDTH: f32 = 560.0;
 pub const WINDOW_HEIGHT: f32 = 200.0;
+pub const ACTION_BUTTON_WIDTH: f32 = 92.0;
 pub const AUTO_CLOSE_DELAY: Duration = Duration::from_millis(900);
 
 pub const CARD_BG: u32 = 0xffffff;

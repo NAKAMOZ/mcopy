@@ -1,11 +1,19 @@
 use super::constants::{
-    ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER, DISABLED_TEXT, MUTED_TEXT, PROGRESS_TRACK,
-    SOFT_TEXT,
+    ACTION_BUTTON_WIDTH, ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER, DISABLED_TEXT,
+    MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT,
 };
 use gpui::*;
 
 pub fn surface_card() -> Div {
     div().bg(rgb(CARD_BG)).rounded_xl()
+}
+
+pub fn brand_mark() -> Div {
+    div()
+        .w(px(18.))
+        .h(px(27.))
+        .flex_none()
+        .child(img("logo.svg").w_full().h_full())
 }
 
 pub fn drag_region(content: impl IntoElement) -> impl IntoElement {
@@ -101,6 +109,7 @@ pub fn controls_row(
 pub fn message_banner(message: String) -> Div {
     div()
         .w_full()
+        .h(px(16.))
         .text_xs()
         .text_color(rgb(SOFT_TEXT))
         .child(message)
@@ -115,8 +124,8 @@ pub fn action_button(
 ) -> impl IntoElement {
     let base = div()
         .id(id)
+        .w(px(ACTION_BUTTON_WIDTH))
         .h(px(32.))
-        .px_4()
         .flex()
         .items_center()
         .justify_center()

@@ -1,8 +1,5 @@
-// Hide the terminal window in Windows release builds.
-#![cfg_attr(
-    all(target_os = "windows", not(debug_assertions)),
-    windows_subsystem = "windows"
-)]
+// Hide the terminal window in Windows builds.
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use clap::{Parser, Subcommand};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -82,8 +79,8 @@ async fn main() -> anyhow::Result<()> {
             let exe = std::env::current_exe()?;
             println!("Exe path: {:?}", exe);
 
-            // Install the context menu
-            context_menu::install_context_menu(&exe)?;
+            // Install or replace an older context-menu integration.
+            context_menu::install_or_update_context_menu(&exe)?;
         }
 
         Some(Commands::Uninstall) => {
@@ -178,6 +175,11 @@ async fn main() -> anyhow::Result<()> {
             }
 
             let _ = ui_thread.join();
+        }
+
+        None if args.src.is_none() && args.dst.is_none() => {
+            let exe = std::env::current_exe()?;
+            ui::show_install_window(exe);
         }
 
         None => {
