@@ -1,5 +1,5 @@
-use crate::context_menu::{self, ContextMenuInstallState};
 use gpui::*;
+use mcopy::platform::{self, ContextMenu, ContextMenuInstallState, Platform};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -363,7 +363,7 @@ fn version_label(top: f32) -> Div {
         .text_size(px(11.))
         .line_height(px(14.))
         .text_color(rgb(MUTED_TEXT))
-        .child(format!("v{}", context_menu::CURRENT_VERSION))
+        .child(format!("v{}", platform::CURRENT_VERSION))
 }
 
 fn install_action_button(
@@ -430,7 +430,7 @@ fn start_operation(
             InstallOperation::Install => perform_install(&exe_path),
             InstallOperation::Uninstall => perform_uninstall(&exe_path),
         };
-        let refreshed_state = context_menu::context_menu_install_state();
+        let refreshed_state = Platform::state();
         let mut state = state.lock().unwrap();
 
         state.active_operation = None;
@@ -461,7 +461,7 @@ fn perform_install(exe_path: &Path) -> anyhow::Result<()> {
         }
     }
 
-    context_menu::install_or_update_context_menu(exe_path)
+    platform::install_or_update_context_menu(exe_path)
 }
 
 fn perform_uninstall(exe_path: &Path) -> anyhow::Result<()> {
@@ -472,7 +472,7 @@ fn perform_uninstall(exe_path: &Path) -> anyhow::Result<()> {
         }
     }
 
-    context_menu::uninstall_context_menu()
+    Platform::uninstall()
 }
 
 #[cfg(target_os = "windows")]
@@ -527,7 +527,7 @@ fn wide_null(value: &str) -> Vec<u16> {
 }
 
 pub fn show_install_window(exe_path: PathBuf) {
-    let state = context_menu::context_menu_install_state()
+    let state = Platform::state()
         .map(|install_state| InstallRenderState {
             install_state,
             active_operation: None,

@@ -1,5 +1,6 @@
 pub mod clipboard;
 pub mod copy;
+pub mod platform;
 pub mod util;
 
 pub use copy::{

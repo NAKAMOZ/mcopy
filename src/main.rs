@@ -6,11 +6,11 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use std::time::Instant;
 
-mod context_menu;
 mod ui;
 
 // Reuse the shared library crate.
 use mcopy::clipboard;
+use mcopy::platform::{self, ContextMenu, Platform};
 use mcopy::{
     CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
     copy_files_with_progress, normalize_path, precreate_directories,
@@ -80,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
             println!("Exe path: {:?}", exe);
 
             // Install or replace an older context-menu integration.
-            context_menu::install_or_update_context_menu(&exe)?;
+            platform::install_or_update_context_menu(&exe)?;
         }
 
         Some(Commands::Uninstall) => {
@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
             require_admin()?;
 
             // Remove the context menu
-            context_menu::uninstall_context_menu()?;
+            Platform::uninstall()?;
         }
 
         Some(Commands::Copy { paths, append }) => {
