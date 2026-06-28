@@ -1,8 +1,8 @@
 use crate::cli::Args;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use mcopy::clipboard;
-use mcopy::ui;
 use mcopy::platform::{self, ContextMenu, Platform};
+use mcopy::ui;
 use mcopy::{
     CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
     copy_files_with_progress, normalize_path, precreate_directories,

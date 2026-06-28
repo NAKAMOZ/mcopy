@@ -164,9 +164,7 @@ fn install_thunar_actions(exe_path: &str) -> anyhow::Result<()> {
     // Thunar uses `uca.xml`, which is harder to edit programmatically.
     // Print setup guidance instead.
     println!("  Thunar: manual setup required");
-    println!(
-        "    1. Edit > Configure custom actions"
-    );
+    println!("    1. Edit > Configure custom actions");
     println!(
         "    2. Add: Name='mcopy Copy', Command='{} copy %f'",
         exe_path

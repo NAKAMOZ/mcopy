@@ -9,12 +9,12 @@ pub use state::{CURRENT_VERSION, ContextMenuInstallState};
 
 use std::path::Path;
 
-#[cfg(target_os = "windows")]
-mod windows;
-#[cfg(target_os = "macos")]
-mod macos;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// Context-menu integration for one operating system.
 ///
@@ -42,14 +42,14 @@ pub struct Unsupported;
 impl ContextMenu for Unsupported {}
 
 // The single `#[cfg]` selection point for the active OS implementation.
-#[cfg(target_os = "windows")]
-pub use windows::WindowsMenu as Platform;
-#[cfg(target_os = "macos")]
-pub use macos::MacosMenu as Platform;
-#[cfg(target_os = "linux")]
-pub use linux::LinuxMenu as Platform;
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub use Unsupported as Platform;
+#[cfg(target_os = "linux")]
+pub use linux::LinuxMenu as Platform;
+#[cfg(target_os = "macos")]
+pub use macos::MacosMenu as Platform;
+#[cfg(target_os = "windows")]
+pub use windows::WindowsMenu as Platform;
 
 /// Install the context menu, replacing a stale version if one is present.
 pub fn install_or_update_context_menu(exe_path: &Path) -> anyhow::Result<()> {

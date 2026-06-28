@@ -368,31 +368,28 @@ pub fn show_install_window(exe_path: PathBuf) {
     };
     let state = Arc::new(Mutex::new(state));
 
-    Application::new()
-        .with_assets(LogoAssets)
-        .run(move |cx| {
-            let bounds =
-                Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: None,
-                focus: true,
-                show: true,
-                kind: WindowKind::PopUp,
-                is_resizable: false,
-                is_minimizable: false,
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            };
+    Application::new().with_assets(LogoAssets).run(move |cx| {
+        let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: None,
+            focus: true,
+            show: true,
+            kind: WindowKind::PopUp,
+            is_resizable: false,
+            is_minimizable: false,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        };
 
-            cx.open_window(options, move |_, cx| {
-                let exe_path = exe_path.clone();
-                let state = state.clone();
-                cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone()))
-            })
-            .unwrap();
+        cx.open_window(options, move |_, cx| {
+            let exe_path = exe_path.clone();
+            let state = state.clone();
+            cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone()))
+        })
+        .unwrap();
 
-            cx.activate(true);
-        });
+        cx.activate(true);
+    });
 }

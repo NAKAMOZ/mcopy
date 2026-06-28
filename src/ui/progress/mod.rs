@@ -196,7 +196,10 @@ struct VisualState {
     file_placeholder: &'static str,
 }
 
-fn resolve_visual_state(snapshot: &CopyProgressSnapshot, controller: &CopyController) -> VisualState {
+fn resolve_visual_state(
+    snapshot: &CopyProgressSnapshot,
+    controller: &CopyController,
+) -> VisualState {
     if snapshot.is_terminal() {
         if controller.is_cancelled() {
             VisualState {
@@ -258,30 +261,28 @@ fn resolve_visual_state(snapshot: &CopyProgressSnapshot, controller: &CopyContro
 }
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
-    Application::new()
-        .with_assets(LogoAssets)
-        .run(move |cx| {
-            let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: None,
-                focus: true,
-                show: true,
-                kind: WindowKind::PopUp,
-                is_resizable: false,
-                is_minimizable: false,
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            };
+    Application::new().with_assets(LogoAssets).run(move |cx| {
+        let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: None,
+            focus: true,
+            show: true,
+            kind: WindowKind::PopUp,
+            is_resizable: false,
+            is_minimizable: false,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        };
 
-            cx.open_window(options, move |_, cx| {
-                let progress = progress.clone();
-                let controller = controller.clone();
-                cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
-            })
-            .unwrap();
+        cx.open_window(options, move |_, cx| {
+            let progress = progress.clone();
+            let controller = controller.clone();
+            cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
+        })
+        .unwrap();
 
-            cx.activate(true);
-        });
+        cx.activate(true);
+    });
 }
