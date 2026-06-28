@@ -1,35 +1,20 @@
-use super::constants::{
+mod state;
+
+pub use state::CopyProgress;
+use state::CopyProgressSnapshot;
+
+use crate::CopyController;
+use crate::ui::assets::LogoAssets;
+use crate::ui::theme::{
     ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
     WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
-use super::progress::CopyProgress;
-use super::widgets::{
+use crate::ui::widgets::{
     action_button, brand_mark, controls_row, counter_display, drag_region, file_name_row,
     header_row, message_banner, progress_bar, status_text, surface_card,
 };
 use gpui::*;
-use mcopy::CopyController;
-use std::borrow::Cow;
 use std::time::Duration;
-
-struct ProgressAssets;
-
-impl AssetSource for ProgressAssets {
-    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
-        Ok(match path {
-            "logo.svg" => Some(Cow::Borrowed(include_bytes!("../../logo.svg"))),
-            _ => None,
-        })
-    }
-
-    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
-        Ok(if path.is_empty() {
-            vec![SharedString::from("logo.svg")]
-        } else {
-            Vec::new()
-        })
-    }
-}
 
 pub struct ProgressWindow {
     progress: CopyProgress,
@@ -211,10 +196,7 @@ struct VisualState {
     file_placeholder: &'static str,
 }
 
-fn resolve_visual_state(
-    snapshot: &super::progress::CopyProgressSnapshot,
-    controller: &CopyController,
-) -> VisualState {
+fn resolve_visual_state(snapshot: &CopyProgressSnapshot, controller: &CopyController) -> VisualState {
     if snapshot.is_terminal() {
         if controller.is_cancelled() {
             VisualState {
@@ -277,7 +259,7 @@ fn resolve_visual_state(
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
     Application::new()
-        .with_assets(ProgressAssets)
+        .with_assets(LogoAssets)
         .run(move |cx| {
             let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
             let options = WindowOptions {

@@ -19,6 +19,13 @@ pub const DISABLED_BG: u32 = 0xfafafa;
 pub const DISABLED_BORDER: u32 = 0xe5e5e5;
 pub const DISABLED_TEXT: u32 = 0xb3b3b3;
 
+// Install-window specific colors (folded in from the old ui/install.rs).
+pub const SUCCESS_HOVER: u32 = 0x20b956;
+pub const BLACK_FILL: u32 = 0x000000;
+pub const BLACK_HOVER: u32 = 0x1a1a1a;
+pub const INSTALL_DISABLED_BG: u32 = 0xe5e5e5;
+pub const ERROR_TEXT: u32 = 0x8a8a8a;
+
 #[derive(Clone, Copy)]
 pub enum ButtonTone {
     Primary,

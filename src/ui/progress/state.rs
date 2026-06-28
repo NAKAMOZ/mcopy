@@ -1,5 +1,5 @@
-use super::constants::AUTO_CLOSE_DELAY;
-use mcopy::{CopyController, ProgressPhase, ProgressUpdate};
+use crate::ui::theme::AUTO_CLOSE_DELAY;
+use crate::{CopyController, ProgressPhase, ProgressUpdate};
 use std::{
     sync::{Arc, Mutex},
     time::Instant,

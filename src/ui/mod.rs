@@ -1,9 +1,8 @@
-mod constants;
+mod assets;
 mod install;
 mod progress;
+mod theme;
 mod widgets;
-mod window;
 
 pub use install::show_install_window;
-pub use progress::CopyProgress;
-pub use window::show_progress_window;
+pub use progress::{CopyProgress, show_progress_window};

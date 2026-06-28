@@ -1,7 +1,14 @@
+mod state;
+
+use crate::platform;
+use crate::ui::assets::LogoAssets;
+use crate::ui::theme::{
+    BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG, MUTED_TEXT, SUCCESS_FILL,
+    SUCCESS_HOVER, TITLE_TEXT,
+};
 use gpui::*;
-use mcopy::platform::{self, ContextMenu, ContextMenuInstallState, Platform};
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use state::{InstallOperation, InstallRenderState, start_operation};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -11,55 +18,6 @@ const INSTALLED_WINDOW_HEIGHT: f32 = 286.0;
 const SIDE_PADDING: f32 = 24.0;
 const BUTTON_WIDTH: f32 = INSTALL_WINDOW_WIDTH - (SIDE_PADDING * 2.0);
 const BUTTON_HEIGHT: f32 = 39.0;
-
-const CARD_BG: u32 = 0xffffff;
-const TITLE_TEXT: u32 = 0x111111;
-const MUTED_TEXT: u32 = 0x999999;
-const SUCCESS_FILL: u32 = 0x22c55e;
-const SUCCESS_HOVER: u32 = 0x20b956;
-const BLACK_FILL: u32 = 0x000000;
-const BLACK_HOVER: u32 = 0x1a1a1a;
-const DISABLED_BG: u32 = 0xe5e5e5;
-const ERROR_TEXT: u32 = 0x8a8a8a;
-
-struct InstallAssets;
-
-impl AssetSource for InstallAssets {
-    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
-        Ok(match path {
-            "logo.svg" => Some(Cow::Borrowed(include_bytes!("../../logo.svg"))),
-            _ => None,
-        })
-    }
-
-    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
-        Ok(if path.is_empty() {
-            vec![SharedString::from("logo.svg")]
-        } else {
-            Vec::new()
-        })
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum InstallOperation {
-    Install,
-    Uninstall,
-}
-
-#[derive(Clone)]
-struct InstallRenderState {
-    install_state: ContextMenuInstallState,
-    active_operation: Option<InstallOperation>,
-    message: String,
-    is_error: bool,
-}
-
-impl InstallRenderState {
-    fn is_busy(&self) -> bool {
-        self.active_operation.is_some()
-    }
-}
 
 pub struct InstallWindow {
     exe_path: PathBuf,
@@ -222,8 +180,8 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             status_top: 128.0,
             install_label: "Installing",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
             install_button_top: 150.0,
             version_top: 206.0,
@@ -236,8 +194,8 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             status_top: 128.0,
             install_label: "Install",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
             install_button_top: 150.0,
             version_top: 252.0,
@@ -250,8 +208,8 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             status_top: 128.0,
             install_label: "Install",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
             install_button_top: 150.0,
             version_top: 252.0,
@@ -401,145 +359,8 @@ fn install_action_button(
     }
 }
 
-fn start_operation(
-    state: Arc<Mutex<InstallRenderState>>,
-    exe_path: PathBuf,
-    operation: InstallOperation,
-) -> bool {
-    {
-        let mut state = state.lock().unwrap();
-        if state.is_busy() {
-            return false;
-        }
-
-        if operation == InstallOperation::Install && state.install_state.is_current_version() {
-            return false;
-        }
-
-        if operation == InstallOperation::Uninstall && !state.install_state.is_current_version() {
-            return false;
-        }
-
-        state.active_operation = Some(operation);
-        state.message.clear();
-        state.is_error = false;
-    }
-
-    std::thread::spawn(move || {
-        let result = match operation {
-            InstallOperation::Install => perform_install(&exe_path),
-            InstallOperation::Uninstall => perform_uninstall(&exe_path),
-        };
-        let refreshed_state = Platform::state();
-        let mut state = state.lock().unwrap();
-
-        state.active_operation = None;
-        if let Ok(install_state) = refreshed_state {
-            state.install_state = install_state;
-        }
-
-        match result {
-            Ok(()) => {
-                state.message.clear();
-                state.is_error = false;
-            }
-            Err(error) => {
-                state.message = format!("{}", error);
-                state.is_error = true;
-            }
-        }
-    });
-
-    true
-}
-
-fn perform_install(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "install");
-        }
-    }
-
-    platform::install_or_update_context_menu(exe_path)
-}
-
-fn perform_uninstall(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "uninstall");
-        }
-    }
-
-    Platform::uninstall()
-}
-
-#[cfg(target_os = "windows")]
-fn run_elevated_command(exe_path: &Path, command: &str) -> anyhow::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, INFINITE, WaitForSingleObject,
-    };
-    use windows_sys::Win32::UI::Shell::{
-        SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
-
-    let verb = wide_null("runas");
-    let file: Vec<u16> = exe_path.as_os_str().encode_wide().chain([0]).collect();
-    let parameters = wide_null(command);
-
-    let mut execute_info = SHELLEXECUTEINFOW {
-        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-        fMask: SEE_MASK_NOCLOSEPROCESS,
-        lpVerb: verb.as_ptr(),
-        lpFile: file.as_ptr(),
-        lpParameters: parameters.as_ptr(),
-        nShow: SW_HIDE,
-        ..Default::default()
-    };
-
-    let started = unsafe { ShellExecuteExW(&mut execute_info) };
-    if started == 0 {
-        let error = unsafe { GetLastError() };
-        anyhow::bail!("could not start elevated command: Windows error {}", error);
-    }
-
-    let mut exit_code = 0;
-    unsafe {
-        WaitForSingleObject(execute_info.hProcess, INFINITE);
-        GetExitCodeProcess(execute_info.hProcess, &mut exit_code);
-        CloseHandle(execute_info.hProcess);
-    }
-
-    if exit_code == 0 {
-        Ok(())
-    } else {
-        anyhow::bail!("elevated command exited with code {}", exit_code)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn wide_null(value: &str) -> Vec<u16> {
-    value.encode_utf16().chain([0]).collect()
-}
-
 pub fn show_install_window(exe_path: PathBuf) {
-    let state = Platform::state()
-        .map(|install_state| InstallRenderState {
-            install_state,
-            active_operation: None,
-            message: String::new(),
-            is_error: false,
-        })
-        .unwrap_or_else(|error| InstallRenderState {
-            install_state: ContextMenuInstallState::NotInstalled,
-            active_operation: None,
-            message: format!("{}", error),
-            is_error: true,
-        });
+    let state = InstallRenderState::probe();
     let window_height = if state.install_state.is_current_version() {
         INSTALLED_WINDOW_HEIGHT
     } else {
@@ -548,7 +369,7 @@ pub fn show_install_window(exe_path: PathBuf) {
     let state = Arc::new(Mutex::new(state));
 
     Application::new()
-        .with_assets(InstallAssets)
+        .with_assets(LogoAssets)
         .run(move |cx| {
             let bounds =
                 Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
