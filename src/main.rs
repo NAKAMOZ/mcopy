@@ -6,11 +6,11 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use std::time::Instant;
 
-mod clipboard;
 mod context_menu;
 mod ui;
 
-// Reuse the shared copy pipeline from lib.rs.
+// Reuse the shared library crate.
+use mcopy::clipboard;
 use mcopy::{
     CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
     copy_files_with_progress, normalize_path, precreate_directories,

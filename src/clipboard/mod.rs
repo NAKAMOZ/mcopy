@@ -1,36 +1,9 @@
+mod session;
+
+use crate::normalize_path;
 use arboard::Clipboard;
-use mcopy::normalize_path;
+use session::{clear_timestamp, last_copy_time, now_epoch, set_last_copy_time};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-/// Path to the timestamp file.
-fn get_timestamp_path() -> PathBuf {
-    std::env::temp_dir().join("mcopy_session.tmp")
-}
-
-/// Read the last copy timestamp in epoch seconds.
-fn get_last_copy_time() -> Option<u64> {
-    std::fs::read_to_string(get_timestamp_path())
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-}
-
-/// Persist the latest copy timestamp.
-fn set_last_copy_time() {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let _ = std::fs::write(get_timestamp_path(), now.to_string());
-}
-
-/// Current time in epoch seconds.
-fn now_epoch() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
 
 /// Write paths to the clipboard as newline-separated absolute paths.
 pub fn copy_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
@@ -63,7 +36,7 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     const SESSION_TIMEOUT_SECS: u64 = 2;
 
     // Decide whether the previous copy session is still active.
-    let should_clear = match get_last_copy_time() {
+    let should_clear = match last_copy_time() {
         Some(last_time) => now_epoch() - last_time > SESSION_TIMEOUT_SECS,
         None => true,
     };
@@ -124,6 +97,6 @@ pub fn clear_clipboard() -> anyhow::Result<()> {
     let mut clipboard = Clipboard::new()?;
     clipboard.set_text("")?;
     // Remove the session timestamp too.
-    let _ = std::fs::remove_file(get_timestamp_path());
+    clear_timestamp();
     Ok(())
 }
