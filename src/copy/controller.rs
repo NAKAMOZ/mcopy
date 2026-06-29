@@ -1,5 +1,5 @@
 use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
-use std::time::Duration;
+use tokio::sync::Notify;
 
 /// Cooperative control for copy operations.
 ///
@@ -9,6 +9,9 @@ use std::time::Duration;
 pub struct CopyController {
     paused: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
+    /// Wakes tasks parked in `wait_until_resumed` on resume or cancel, so the
+    /// pause path parks instead of polling.
+    notify: Arc<Notify>,
 }
 
 impl CopyController {
@@ -24,10 +27,12 @@ impl CopyController {
 
     pub fn resume(&self) {
         self.paused.store(false, Ordering::Release);
+        self.notify.notify_waiters();
     }
 
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
+        self.notify.notify_waiters();
     }
 
     pub fn is_paused(&self) -> bool {
@@ -39,14 +44,25 @@ impl CopyController {
     }
 
     pub(crate) async fn wait_until_resumed(&self) -> bool {
-        while self.is_paused() {
+        loop {
             if self.is_cancelled() {
                 return false;
             }
+            if !self.is_paused() {
+                return true;
+            }
 
-            tokio::time::sleep(Duration::from_millis(80)).await;
+            // Register interest before re-checking the flags so a resume/cancel
+            // landing here cannot be missed (lost-wakeup safe), then park.
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            if !self.is_paused() || self.is_cancelled() {
+                continue;
+            }
+
+            notified.await;
         }
-
-        !self.is_cancelled()
     }
 }
