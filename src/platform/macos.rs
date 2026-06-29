@@ -30,6 +30,12 @@ impl ContextMenu for MacosMenu {
 
         write_install_metadata(&home)?;
 
+        // Nudge the pasteboard server to re-scan ~/Library/Services so the new
+        // workflows show up without a re-login (best-effort).
+        let _ = std::process::Command::new("/System/Library/CoreServices/pbs")
+            .arg("-update")
+            .status();
+
         println!("✓ Finder Services installed successfully!");
         println!("  Location: {}", services_dir.display());
         println!("  Note: Enable them in System Preferences > Keyboard > Shortcuts > Services");
