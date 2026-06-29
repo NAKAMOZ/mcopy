@@ -19,6 +19,17 @@ const SIDE_PADDING: f32 = 24.0;
 const BUTTON_WIDTH: f32 = INSTALL_WINDOW_WIDTH - (SIDE_PADDING * 2.0);
 const BUTTON_HEIGHT: f32 = 39.0;
 
+// Vertical layout offsets (absolute px from the card top). Named so a font or
+// size change is a single edit instead of hunting scattered magic numbers.
+const DRAG_AREA_HEIGHT: f32 = 108.0;
+const STATUS_TOP: f32 = 128.0;
+const INSTALL_BUTTON_TOP: f32 = 150.0;
+const UNINSTALL_BUTTON_TOP: f32 = 197.0;
+/// Version label position on the short (not-installed/installing) window.
+const VERSION_TOP_COMPACT: f32 = 206.0;
+/// Version label position on the tall (installed/uninstalling) window.
+const VERSION_TOP_TALL: f32 = 252.0;
+
 pub struct InstallWindow {
     exe_path: PathBuf,
     state: Arc<Mutex<InstallRenderState>>,
@@ -124,7 +135,7 @@ impl Render for InstallWindow {
                     .left(px(0.))
                     .top(px(0.))
                     .w_full()
-                    .h(px(108.))
+                    .h(px(DRAG_AREA_HEIGHT))
                     .window_control_area(WindowControlArea::Drag),
             )
             .child(header())
@@ -147,7 +158,7 @@ impl Render for InstallWindow {
                 div()
                     .absolute()
                     .left(px(SIDE_PADDING))
-                    .top(px(197.))
+                    .top(px(UNINSTALL_BUTTON_TOP))
                     .child(uninstall_cta),
             );
         }
@@ -177,42 +188,42 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             window_title: "mcopy - Installing",
             window_height: INSTALL_WINDOW_HEIGHT,
             status_line: Some("Installing".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Installing",
             install_disabled: true,
             install_background: INSTALL_DISABLED_BG,
             install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 206.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_COMPACT,
             show_uninstall: false,
         },
         Some(InstallOperation::Uninstall) => InstallVisual {
             window_title: "mcopy - Uninstalling",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Uninstalling".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: true,
             install_background: INSTALL_DISABLED_BG,
             install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 252.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_TALL,
             show_uninstall: true,
         },
         None if state.install_state.is_current_version() => InstallVisual {
             window_title: "mcopy - Already Installed",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Already installed".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: true,
             install_background: INSTALL_DISABLED_BG,
             install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 252.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_TALL,
             show_uninstall: true,
         },
         None => InstallVisual {
@@ -223,14 +234,14 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             } else {
                 Some(state.message.clone())
             },
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: false,
             install_background: SUCCESS_FILL,
             install_hover: SUCCESS_HOVER,
             install_text: CARD_BG,
-            install_button_top: 150.0,
-            version_top: 206.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_COMPACT,
             show_uninstall: false,
         },
     }

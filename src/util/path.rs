@@ -11,10 +11,14 @@ pub fn calculate_concurrency(user_override: Option<usize>) -> usize {
 
 /// Strip the Windows UNC path prefix (`\\?\C:\... -> C:\...`).
 pub fn normalize_path(path: PathBuf) -> PathBuf {
-    let path_str = path.to_string_lossy();
-    if let Some(stripped) = path_str.strip_prefix(r"\\?\") {
-        PathBuf::from(stripped)
-    } else {
-        path
+    // Fast path: only convert to a string when the prefix is actually present,
+    // so the common (unprefixed) case allocates nothing.
+    if !path.as_os_str().as_encoded_bytes().starts_with(br"\\?\") {
+        return path;
+    }
+
+    match path.to_string_lossy().strip_prefix(r"\\?\") {
+        Some(stripped) => PathBuf::from(stripped),
+        None => path,
     }
 }

@@ -17,7 +17,7 @@ pub(super) fn last_copy_time() -> Option<u64> {
 pub(super) fn set_last_copy_time() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
     let _ = std::fs::write(timestamp_path(), now.to_string());
 }
@@ -26,7 +26,7 @@ pub(super) fn set_last_copy_time() {
 pub(super) fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 
