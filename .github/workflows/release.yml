@@ -1,0 +1,68 @@
+name: release
+
+# Build release binaries for all three platforms and upload them as artifacts.
+# Windows embeds its icon/manifest via build.rs; macOS is packaged into a proper
+# .app bundle (see scripts/bundle-macos.sh). Code signing / notarization is out
+# of scope for now (TODO before publishing signed builds).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # gpui needs system libs on Linux (X11/Wayland, fontconfig, etc.).
+      - name: Install Linux build deps
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb1-dev libxkbcommon-dev libwayland-dev \
+            libfontconfig-dev libfreetype-dev pkg-config
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Package macOS .app
+        if: matrix.name == 'macos'
+        run: ./scripts/bundle-macos.sh
+
+      - name: Upload Linux binary
+        if: matrix.name == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcopy-linux
+          path: target/release/mcopy
+
+      - name: Upload Windows binary
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcopy-windows
+          path: target/release/mcopy.exe
+
+      - name: Upload macOS .app
+        if: matrix.name == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcopy-macos
+          path: dist/mcopy.app
