@@ -3,6 +3,7 @@ mod session;
 use crate::normalize_path;
 use arboard::Clipboard;
 use session::{clear_timestamp, last_copy_time, now_epoch, set_last_copy_time};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// Write paths to the clipboard as newline-separated absolute paths.
@@ -48,10 +49,12 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
         paste_paths_from_clipboard().unwrap_or_default()
     };
 
-    // Append new paths while keeping the list unique.
+    // Append new paths while keeping the list unique. A HashSet tracks seen
+    // paths in O(1) so the dedup check is not a linear scan per iteration.
+    let mut seen: HashSet<PathBuf> = existing.iter().cloned().collect();
     for path in paths {
         if let Ok(abs_path) = path.canonicalize().map(normalize_path)
-            && !existing.contains(&abs_path)
+            && seen.insert(abs_path.clone())
         {
             existing.push(abs_path);
         }
