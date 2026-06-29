@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 const SERVICES_DIR: &str = "Library/Services";
 const SUPPORT_DIR: &str = "Library/Application Support/mcopy";
 const VERSION_FILE: &str = "install-version";
+const COPY_SERVICE_NAME: &str = "Copy with mcopy";
+const PASTE_SERVICE_NAME: &str = "Paste with mcopy";
+const LEGACY_SERVICE_NAMES: &[&str] = &["mcopy Copy", "mcopy Paste"];
 
 pub struct MacosMenu;
 
@@ -23,10 +26,10 @@ impl ContextMenu for MacosMenu {
             .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
 
         // mcopy Copy workflow
-        create_automator_workflow(&services_dir, "mcopy Copy", exe_str, "copy")?;
+        create_automator_workflow(&services_dir, COPY_SERVICE_NAME, exe_str, "copy")?;
 
         // mcopy Paste workflow
-        create_automator_workflow(&services_dir, "mcopy Paste", exe_str, "paste")?;
+        create_automator_workflow(&services_dir, PASTE_SERVICE_NAME, exe_str, "paste")?;
 
         write_install_metadata(&home)?;
 
@@ -47,15 +50,13 @@ impl ContextMenu for MacosMenu {
         let home = home_dir()?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
-        // Remove the workflow bundles.
-        let copy_workflow = services_dir.join("mcopy Copy.workflow");
-        let paste_workflow = services_dir.join("mcopy Paste.workflow");
-
-        if copy_workflow.exists() {
-            fs::remove_dir_all(&copy_workflow)?;
-        }
-        if paste_workflow.exists() {
-            fs::remove_dir_all(&paste_workflow)?;
+        // Remove current and legacy workflow bundles so renames do not leave
+        // duplicate Finder Services behind.
+        for name in current_and_legacy_service_names() {
+            let workflow = workflow_path(&services_dir, name);
+            if workflow.exists() {
+                fs::remove_dir_all(workflow)?;
+            }
         }
 
         remove_install_metadata(&home)?;
@@ -68,18 +69,23 @@ impl ContextMenu for MacosMenu {
         let home = home_dir()?;
         let version_path = version_file_path(&home);
 
+        let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
+
         if let Ok(version) = fs::read_to_string(&version_path) {
             let version = version.trim().to_string();
             if !version.is_empty() {
+                if version == CURRENT_VERSION && !workflows_are_current(&services_dir) {
+                    return Ok(ContextMenuInstallState::Installed { version: None });
+                }
+
                 return Ok(ContextMenuInstallState::Installed {
                     version: Some(version),
                 });
             }
         }
 
-        let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
-        let copy_workflow = services_dir.join("mcopy Copy.workflow");
-        let paste_workflow = services_dir.join("mcopy Paste.workflow");
+        let copy_workflow = workflow_path(&services_dir, COPY_SERVICE_NAME);
+        let paste_workflow = workflow_path(&services_dir, PASTE_SERVICE_NAME);
 
         if copy_workflow.exists() || paste_workflow.exists() {
             return Ok(ContextMenuInstallState::Installed { version: None });
@@ -113,16 +119,43 @@ fn version_file_path(home: &str) -> PathBuf {
     PathBuf::from(home).join(SUPPORT_DIR).join(VERSION_FILE)
 }
 
+fn workflow_path(services_dir: &Path, name: &str) -> PathBuf {
+    services_dir.join(format!("{}.workflow", name))
+}
+
+fn current_and_legacy_service_names() -> impl Iterator<Item = &'static str> {
+    [COPY_SERVICE_NAME, PASTE_SERVICE_NAME]
+        .into_iter()
+        .chain(LEGACY_SERVICE_NAMES.iter().copied())
+}
+
+fn workflows_are_current(services_dir: &Path) -> bool {
+    workflow_is_current(services_dir, COPY_SERVICE_NAME)
+        && workflow_is_current(services_dir, PASTE_SERVICE_NAME)
+}
+
+fn workflow_is_current(services_dir: &Path, name: &str) -> bool {
+    let workflow_dir = workflow_path(services_dir, name);
+    workflow_dir.join("Contents/Info.plist").is_file()
+        && workflow_dir
+            .join("Contents/Resources/document.wflow")
+            .is_file()
+}
+
 fn create_automator_workflow(
     services_dir: &Path,
     name: &str,
     exe_path: &str,
     action: &str,
 ) -> anyhow::Result<()> {
-    let workflow_dir = services_dir.join(format!("{}.workflow", name));
+    let workflow_dir = workflow_path(services_dir, name);
     let contents_dir = workflow_dir.join("Contents");
+    let resources_dir = contents_dir.join("Resources");
 
-    fs::create_dir_all(&contents_dir)?;
+    fs::create_dir_all(&resources_dir)?;
+
+    let escaped_name = xml_escape(name);
+    let bundle_identifier = format!("com.mcopy.service.{}", action);
 
     // Info.plist
     let info_plist = format!(
@@ -130,6 +163,14 @@ fn create_automator_workflow(
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleIdentifier</key>
+    <string>{}</string>
+    <key>CFBundleName</key>
+    <string>{}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>{}</string>
     <key>NSServices</key>
     <array>
         <dict>
@@ -140,6 +181,11 @@ fn create_automator_workflow(
             </dict>
             <key>NSMessage</key>
             <string>runWorkflowAsService</string>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>com.apple.finder</string>
+            </dict>
             <key>NSSendFileTypes</key>
             <array>
                 <string>public.item</string>
@@ -148,9 +194,12 @@ fn create_automator_workflow(
     </array>
 </dict>
 </plist>"#,
-        name
+        bundle_identifier, escaped_name, CURRENT_VERSION, escaped_name
     );
     fs::write(contents_dir.join("Info.plist"), info_plist)?;
+
+    let command_string = workflow_command(exe_path, action)?;
+    let command_string = xml_escape(&command_string);
 
     // document.wflow - Shell script action
     let wflow = format!(
@@ -208,7 +257,7 @@ fn create_automator_workflow(
                 <key>ActionParameters</key>
                 <dict>
                     <key>COMMAND_STRING</key>
-                    <string>for f in "$@"; do "{}" {} "$f"; done</string>
+                    <string>{}</string>
                     <key>CheckedForUserDefaultShell</key>
                     <true/>
                     <key>inputMethod</key>
@@ -269,14 +318,48 @@ fn create_automator_workflow(
     <dict/>
     <key>workflowMetaData</key>
     <dict>
+        <key>serviceApplicationBundleID</key>
+        <string>com.apple.finder</string>
+        <key>serviceApplicationPath</key>
+        <string>/System/Library/CoreServices/Finder.app</string>
+        <key>serviceInputTypeIdentifier</key>
+        <string>com.apple.Automator.fileSystemObject</string>
+        <key>serviceOutputTypeIdentifier</key>
+        <string>com.apple.Automator.nothing</string>
+        <key>serviceProcessesInput</key>
+        <integer>1</integer>
         <key>workflowTypeIdentifier</key>
         <string>com.apple.Automator.servicesMenu</string>
     </dict>
 </dict>
 </plist>"#,
-        exe_path, action
+        command_string
     );
-    fs::write(contents_dir.join("document.wflow"), wflow)?;
+    fs::write(resources_dir.join("document.wflow"), wflow)?;
+    let _ = fs::remove_file(contents_dir.join("document.wflow"));
 
     Ok(())
+}
+
+fn workflow_command(exe_path: &str, action: &str) -> anyhow::Result<String> {
+    let exe = shell_quote(exe_path);
+
+    match action {
+        "copy" => Ok(format!("{exe} copy \"$@\"")),
+        "paste" => Ok(format!("for f in \"$@\"; do {exe} paste \"$f\"; done")),
+        _ => anyhow::bail!("Unsupported macOS workflow action: {action}"),
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }

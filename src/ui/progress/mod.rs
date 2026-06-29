@@ -4,7 +4,7 @@ pub use state::CopyProgress;
 use state::CopyProgressSnapshot;
 
 use crate::CopyController;
-use crate::ui::assets::{LogoAssets, register_fonts};
+use crate::ui::assets::register_fonts;
 use crate::ui::theme::{
     ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
     WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
@@ -67,9 +67,7 @@ impl ProgressWindow {
                     if snapshot.is_terminal() {
                         // A time-based auto-close is counting down: wake on the
                         // next change or a short timer to re-check the deadline.
-                        let timer = cx
-                            .background_executor()
-                            .timer(Duration::from_millis(120));
+                        let timer = cx.background_executor().timer(Duration::from_millis(120));
                         futures::pin_mut!(timer);
                         futures::future::select(changed, timer).await;
                     } else {
@@ -155,7 +153,7 @@ impl Render for ProgressWindow {
 
         let message = if snapshot.failed_files > 0 {
             format!(
-                "{} files failed while the queue continued.",
+                "{} items failed while the queue continued.",
                 snapshot.failed_files
             )
         } else {
@@ -232,7 +230,7 @@ fn resolve_visual_state(
                 progress_fill: WARNING_FILL,
                 primary_label: "Stopped",
                 primary_tone: ButtonTone::Primary,
-                file_placeholder: "Copy stopped before the next file.",
+                file_placeholder: "Copy stopped before the next item.",
             }
         } else {
             VisualState {
@@ -243,7 +241,7 @@ fn resolve_visual_state(
                 progress_fill: SUCCESS_FILL,
                 primary_label: "Done",
                 primary_tone: ButtonTone::Primary,
-                file_placeholder: "All files were copied.",
+                file_placeholder: "All items were copied.",
             }
         }
     } else if controller.is_cancelled() {
@@ -270,7 +268,7 @@ fn resolve_visual_state(
         }
     } else {
         VisualState {
-            status_label: "Copying Files",
+            status_label: "Copying Items",
             status_color: TITLE_TEXT,
             counter_primary_color: TITLE_TEXT,
             counter_secondary_color: MUTED_TEXT,
@@ -283,8 +281,15 @@ fn resolve_visual_state(
 }
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
-    Application::new().with_assets(LogoAssets).run(move |cx| {
+    Application::new().run(move |cx| {
         register_fonts(cx);
+        cx.on_window_closed(|cx| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
+
         let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

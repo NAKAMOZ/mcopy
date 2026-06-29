@@ -1,6 +1,6 @@
 name: release
 
-# Build release binaries on each native GitHub-hosted runner and attach the
+# Build release binaries on tested native GitHub-hosted runners and attach the
 # packaged outputs to a GitHub Release. Windows embeds its icon/manifest via
 # build.rs; macOS is packaged into a proper .app bundle. Code signing /
 # notarization is out of scope for now.
@@ -19,8 +19,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux
           - os: windows-latest
             name: windows
           - os: macos-latest
@@ -33,28 +31,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # gpui needs system libs on Linux (X11/Wayland, fontconfig, etc.).
-      - name: Install Linux build deps
-        if: matrix.name == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libxcb1-dev libxkbcommon-dev libwayland-dev \
-            libfontconfig-dev libfreetype-dev pkg-config
-
       - name: Build (release)
         run: cargo build --release
 
       - name: Package macOS .app
         if: matrix.name == 'macos'
         run: ./scripts/bundle-macos.sh
-
-      - name: Package Linux binary
-        if: matrix.name == 'linux'
-        run: |
-          mkdir -p dist
-          cp target/release/mcopy dist/mcopy-linux-x86_64
-          tar -C dist -czf dist/mcopy-linux-x86_64.tar.gz mcopy-linux-x86_64
 
       - name: Package Windows binary
         if: matrix.name == 'windows'
@@ -67,13 +49,6 @@ jobs:
       - name: Package macOS app
         if: matrix.name == 'macos'
         run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
-
-      - name: Upload Linux artifact
-        if: matrix.name == 'linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcopy-linux
-          path: dist/mcopy-linux-x86_64.tar.gz
 
       - name: Upload Windows artifact
         if: matrix.name == 'windows'
@@ -94,5 +69,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.tar.gz
             dist/*.zip

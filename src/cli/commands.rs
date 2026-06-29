@@ -5,7 +5,7 @@ use mcopy::clipboard;
 use mcopy::platform::{self, ContextMenu, Platform};
 use mcopy::ui;
 use mcopy::{
-    CopyController, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
+    CopyController, CopyItem, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
     copy_files_with_progress, normalize_path, precreate_directories,
 };
 use std::path::PathBuf;
@@ -61,10 +61,10 @@ pub async fn run_paste(target: PathBuf) -> anyhow::Result<()> {
         return Ok(()); // Exit quietly.
     }
 
-    // Collect all files before opening the UI. Walk independent source roots
+    // Collect all filesystem items before opening the UI. Walk independent source roots
     // concurrently (bounded) so pasting many folders overlaps their traversal.
     let concurrency = calculate_concurrency(None);
-    let per_source: Vec<anyhow::Result<Vec<(PathBuf, PathBuf)>>> = stream::iter(&sources)
+    let per_source: Vec<anyhow::Result<Vec<CopyItem>>> = stream::iter(&sources)
         .map(|src| collect_files(src, &target))
         .buffer_unordered(concurrency)
         .collect()
@@ -85,44 +85,49 @@ pub async fn run_paste(target: PathBuf) -> anyhow::Result<()> {
     let progress_clone = progress.clone();
     let controller_clone = controller.clone();
 
-    // Start the UI thread.
-    let ui_thread = std::thread::spawn(move || {
-        ui::show_progress_window(progress_clone, controller_clone);
+    // GPUI must be constructed on the main thread on macOS. Keep the UI on the
+    // current thread and run the copy job on Tokio worker threads.
+    let copy_task = tokio::spawn(async move {
+        let result = async {
+            // Pre-create destination folders.
+            precreate_directories(&all_files).await?;
+
+            if controller_clone.is_cancelled() {
+                return Ok(());
+            }
+
+            // Bridge copy updates into the UI state.
+            let progress_for_callback = progress_clone.clone();
+            let callback = Box::new(move |update: ProgressUpdate| {
+                progress_for_callback.apply(update);
+            });
+
+            // Start copying.
+            let concurrency = calculate_concurrency(None);
+            copy_files_with_progress(
+                all_files,
+                concurrency,
+                Some(callback),
+                Some(controller_clone.clone()),
+            )
+            .await
+        }
+        .await;
+
+        if controller_clone.is_cancelled() {
+            progress_clone.cancelled();
+        } else if result.is_ok() {
+            progress_clone.complete();
+        } else {
+            progress_clone.cancelled();
+        }
+
+        result
     });
 
-    // Pre-create destination folders.
-    precreate_directories(&all_files).await?;
+    ui::show_progress_window(progress, controller);
 
-    if controller.is_cancelled() {
-        progress.cancelled();
-        let _ = ui_thread.join();
-        return Ok(());
-    }
-
-    // Bridge copy updates into the UI state.
-    let progress_for_callback = progress.clone();
-    let callback = Box::new(move |update: ProgressUpdate| {
-        progress_for_callback.apply(update);
-    });
-
-    // Start copying.
-    let concurrency = calculate_concurrency(None);
-    copy_files_with_progress(
-        all_files,
-        concurrency,
-        Some(callback),
-        Some(controller.clone()),
-    )
-    .await?;
-
-    if controller.is_cancelled() {
-        progress.cancelled();
-    } else {
-        progress.complete();
-    }
-
-    let _ = ui_thread.join();
-    Ok(())
+    copy_task.await?
 }
 
 /// No subcommand: open the install window when no paths were given, otherwise
@@ -151,9 +156,9 @@ async fn run_legacy(args: Args) -> anyhow::Result<()> {
 
     let start = Instant::now();
 
-    // Collect the files.
+    // Collect files, directories, and symlinks.
     let files = collect_files(&src, &dst).await?;
-    println!("Total files: {}", files.len());
+    println!("Total items: {}", files.len());
 
     // Pre-create destination folders.
     precreate_directories(&files).await?;
@@ -168,7 +173,7 @@ async fn run_legacy(args: Args) -> anyhow::Result<()> {
         let overall = multi.add(ProgressBar::new(files.len() as u64));
         overall.set_style(
             ProgressStyle::default_bar()
-                .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({percent}%)")
+                .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} items ({percent}%)")
                 .unwrap()
                 .progress_chars("=>-"),
         );

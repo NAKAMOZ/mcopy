@@ -7,7 +7,7 @@ pub enum ProgressPhase {
 
 /// Progress update.
 ///
-/// `processed_files` counts both successful and failed files.
+/// `processed_files` counts both successful and failed filesystem items.
 #[derive(Clone, Debug)]
 pub struct ProgressUpdate {
     pub phase: ProgressPhase,

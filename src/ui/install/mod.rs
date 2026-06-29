@@ -1,11 +1,12 @@
 mod state;
 
 use crate::platform;
-use crate::ui::assets::{LogoAssets, register_fonts};
+use crate::ui::assets::register_fonts;
 use crate::ui::theme::{
     BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG, MUTED_TEXT, SUCCESS_FILL,
     SUCCESS_HOVER, TITLE_TEXT,
 };
+use crate::ui::widgets::logo_mark;
 use gpui::*;
 use state::{InstallOperation, InstallRenderState, start_operation};
 use std::path::PathBuf;
@@ -275,7 +276,7 @@ fn header() -> Div {
                 .top(px(24.))
                 .w(px(27.))
                 .h(px(41.))
-                .child(img("logo.svg").w_full().h_full()),
+                .child(logo_mark(27., 41.)),
         )
         .child(
             div()
@@ -324,7 +325,7 @@ fn close_button(disabled: bool) -> impl IntoElement {
         base.hover(|this| this.bg(rgb(0xf5f5f5)).text_color(rgb(TITLE_TEXT)))
             .active(|this| this.bg(rgb(0xeeeeee)).text_color(rgb(TITLE_TEXT)))
             .cursor_pointer()
-            .on_click(|_, window, _| window.remove_window())
+            .on_click(|_, _, cx| cx.quit())
     }
 }
 
@@ -399,7 +400,7 @@ pub fn show_install_window(exe_path: PathBuf) {
     let state = Arc::new(Mutex::new(state));
     let notify = Arc::new(Notify::new());
 
-    Application::new().with_assets(LogoAssets).run(move |cx| {
+    Application::new().run(move |cx| {
         register_fonts(cx);
         let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
         let options = WindowOptions {
