@@ -58,29 +58,10 @@ pub async fn copy_files_with_progress(
                 });
             }
 
-            // Resolve the file size before copying.
-            let file_size = match fs::metadata(&src).await {
-                Ok(meta) => meta.len(),
-                Err(e) => {
-                    eprintln!("ERROR: failed to read metadata for {:?} | {}", src, e);
-
-                    let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
-                    if let Some(cb) = callback {
-                        cb(ProgressUpdate {
-                            phase: ProgressPhase::Failed,
-                            processed_files: processed,
-                            file_name,
-                            file_bytes: 0,
-                        });
-                    }
-
-                    return;
-                }
-            };
-
-            // Copy the file.
+            // Copy the file. `fs::copy` returns the byte count, so no separate
+            // `metadata` stat is needed just to learn the size.
             match fs::copy(&src, &dst).await {
-                Ok(_) => {
+                Ok(bytes) => {
                     let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
 
                     if let Some(cb) = callback {
@@ -88,7 +69,7 @@ pub async fn copy_files_with_progress(
                             phase: ProgressPhase::Finished,
                             processed_files: processed,
                             file_name,
-                            file_bytes: file_size,
+                            file_bytes: bytes,
                         });
                     }
                 }
@@ -101,7 +82,7 @@ pub async fn copy_files_with_progress(
                             phase: ProgressPhase::Failed,
                             processed_files: processed,
                             file_name,
-                            file_bytes: file_size,
+                            file_bytes: 0,
                         });
                     }
                 }
