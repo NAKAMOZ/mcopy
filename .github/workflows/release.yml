@@ -1,14 +1,17 @@
 name: release
 
-# Build release binaries for all three platforms and upload them as artifacts.
-# Windows embeds its icon/manifest via build.rs; macOS is packaged into a proper
-# .app bundle (see scripts/bundle-macos.sh). Code signing / notarization is out
-# of scope for now (TODO before publishing signed builds).
+# Build release binaries on each native GitHub-hosted runner and attach the
+# packaged outputs to a GitHub Release. Windows embeds its icon/manifest via
+# build.rs; macOS is packaged into a proper .app bundle. Code signing /
+# notarization is out of scope for now.
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -46,23 +49,50 @@ jobs:
         if: matrix.name == 'macos'
         run: ./scripts/bundle-macos.sh
 
-      - name: Upload Linux binary
+      - name: Package Linux binary
+        if: matrix.name == 'linux'
+        run: |
+          mkdir -p dist
+          cp target/release/mcopy dist/mcopy-linux-x86_64
+          tar -C dist -czf dist/mcopy-linux-x86_64.tar.gz mcopy-linux-x86_64
+
+      - name: Package Windows binary
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target\release\mcopy.exe dist\mcopy-windows-x86_64.exe
+          Compress-Archive -Path dist\mcopy-windows-x86_64.exe -DestinationPath dist\mcopy-windows-x86_64.zip -Force
+
+      - name: Package macOS app
+        if: matrix.name == 'macos'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
+
+      - name: Upload Linux artifact
         if: matrix.name == 'linux'
         uses: actions/upload-artifact@v4
         with:
           name: mcopy-linux
-          path: target/release/mcopy
+          path: dist/mcopy-linux-x86_64.tar.gz
 
-      - name: Upload Windows binary
+      - name: Upload Windows artifact
         if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: mcopy-windows
-          path: target/release/mcopy.exe
+          path: dist/mcopy-windows-x86_64.zip
 
-      - name: Upload macOS .app
+      - name: Upload macOS artifact
         if: matrix.name == 'macos'
         uses: actions/upload-artifact@v4
         with:
           name: mcopy-macos
-          path: dist/mcopy.app
+          path: dist/mcopy-macos.zip
+
+      - name: Attach assets to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
