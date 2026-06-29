@@ -1,4 +1,5 @@
 use crate::cli::Args;
+use futures::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use mcopy::clipboard;
 use mcopy::platform::{self, ContextMenu, Platform};
@@ -60,11 +61,18 @@ pub async fn run_paste(target: PathBuf) -> anyhow::Result<()> {
         return Ok(()); // Exit quietly.
     }
 
-    // Collect all files before opening the UI.
+    // Collect all files before opening the UI. Walk independent source roots
+    // concurrently (bounded) so pasting many folders overlaps their traversal.
+    let concurrency = calculate_concurrency(None);
+    let per_source: Vec<anyhow::Result<Vec<(PathBuf, PathBuf)>>> = stream::iter(&sources)
+        .map(|src| collect_files(src, &target))
+        .buffer_unordered(concurrency)
+        .collect()
+        .await;
+
     let mut all_files = Vec::new();
-    for src in &sources {
-        let files = collect_files(src, &target).await?;
-        all_files.extend(files);
+    for files in per_source {
+        all_files.extend(files?);
     }
 
     if all_files.is_empty() {
