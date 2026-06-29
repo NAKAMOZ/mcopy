@@ -1,35 +1,20 @@
-use super::constants::{
+mod state;
+
+pub use state::CopyProgress;
+use state::CopyProgressSnapshot;
+
+use crate::CopyController;
+use crate::ui::assets::register_fonts;
+use crate::ui::theme::{
     ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
     WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
-use super::progress::CopyProgress;
-use super::widgets::{
+use crate::ui::widgets::{
     action_button, brand_mark, controls_row, counter_display, drag_region, file_name_row,
     header_row, message_banner, progress_bar, status_text, surface_card,
 };
 use gpui::*;
-use mcopy::CopyController;
-use std::borrow::Cow;
 use std::time::Duration;
-
-struct ProgressAssets;
-
-impl AssetSource for ProgressAssets {
-    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
-        Ok(match path {
-            "logo.svg" => Some(Cow::Borrowed(include_bytes!("../../logo.svg"))),
-            _ => None,
-        })
-    }
-
-    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
-        Ok(if path.is_empty() {
-            vec![SharedString::from("logo.svg")]
-        } else {
-            Vec::new()
-        })
-    }
-}
 
 pub struct ProgressWindow {
     progress: CopyProgress,
@@ -59,11 +44,14 @@ impl ProgressWindow {
         window
             .spawn(cx, async move |cx| {
                 loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(120))
-                        .await;
+                    // Register for the next state change *before* reading the
+                    // snapshot so a change landing in between is not missed.
+                    let changed = progress.notified();
+                    futures::pin_mut!(changed);
+                    changed.as_mut().enable();
 
-                    let should_close = progress.snapshot().should_auto_close;
+                    let snapshot = progress.snapshot();
+                    let should_close = snapshot.should_auto_close;
                     let updated = cx.update(|window, _| {
                         if should_close {
                             window.remove_window();
@@ -74,6 +62,17 @@ impl ProgressWindow {
 
                     if updated.is_err() || should_close {
                         break;
+                    }
+
+                    if snapshot.is_terminal() {
+                        // A time-based auto-close is counting down: wake on the
+                        // next change or a short timer to re-check the deadline.
+                        let timer = cx.background_executor().timer(Duration::from_millis(120));
+                        futures::pin_mut!(timer);
+                        futures::future::select(changed, timer).await;
+                    } else {
+                        // Otherwise repaint only when the state actually changes.
+                        changed.await;
                     }
                 }
             })
@@ -128,12 +127,15 @@ impl Render for ProgressWindow {
             visual.primary_label,
             visual.primary_tone,
             pause_disabled,
-            move |_, _, _| {
+            move |_, window, _| {
                 if pause_controller.is_paused() {
                     pause_controller.resume();
                 } else {
                     pause_controller.pause();
                 }
+                // Controller changes don't flow through progress.notify, so
+                // repaint the toggle immediately.
+                window.refresh();
             },
         );
 
@@ -143,12 +145,15 @@ impl Render for ProgressWindow {
             "Cancel",
             ButtonTone::Outline,
             cancel_disabled,
-            move |_, _, _| cancel_controller.cancel(),
+            move |_, window, _| {
+                cancel_controller.cancel();
+                window.refresh();
+            },
         );
 
         let message = if snapshot.failed_files > 0 {
             format!(
-                "{} files failed while the queue continued.",
+                "{} items failed while the queue continued.",
                 snapshot.failed_files
             )
         } else {
@@ -212,7 +217,7 @@ struct VisualState {
 }
 
 fn resolve_visual_state(
-    snapshot: &super::progress::CopyProgressSnapshot,
+    snapshot: &CopyProgressSnapshot,
     controller: &CopyController,
 ) -> VisualState {
     if snapshot.is_terminal() {
@@ -225,7 +230,7 @@ fn resolve_visual_state(
                 progress_fill: WARNING_FILL,
                 primary_label: "Stopped",
                 primary_tone: ButtonTone::Primary,
-                file_placeholder: "Copy stopped before the next file.",
+                file_placeholder: "Copy stopped before the next item.",
             }
         } else {
             VisualState {
@@ -236,7 +241,7 @@ fn resolve_visual_state(
                 progress_fill: SUCCESS_FILL,
                 primary_label: "Done",
                 primary_tone: ButtonTone::Primary,
-                file_placeholder: "All files were copied.",
+                file_placeholder: "All items were copied.",
             }
         }
     } else if controller.is_cancelled() {
@@ -263,7 +268,7 @@ fn resolve_visual_state(
         }
     } else {
         VisualState {
-            status_label: "Copying Files",
+            status_label: "Copying Items",
             status_color: TITLE_TEXT,
             counter_primary_color: TITLE_TEXT,
             counter_secondary_color: MUTED_TEXT,
@@ -276,30 +281,40 @@ fn resolve_visual_state(
 }
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
-    Application::new()
-        .with_assets(ProgressAssets)
-        .run(move |cx| {
-            let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: None,
-                focus: true,
-                show: true,
-                kind: WindowKind::PopUp,
-                is_resizable: false,
-                is_minimizable: false,
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            };
+    Application::new().run(move |cx| {
+        register_fonts(cx);
+        cx.on_window_closed(|cx| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
 
-            cx.open_window(options, move |_, cx| {
-                let progress = progress.clone();
-                let controller = controller.clone();
-                cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
-            })
-            .unwrap();
+        let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: None,
+            focus: true,
+            show: true,
+            kind: WindowKind::PopUp,
+            is_resizable: false,
+            is_minimizable: false,
+            // Transparent background + client-side decorations render differently
+            // across Wayland compositors (some tiling WMs ignore rounding /
+            // transparency). Acceptable; worth testing on GNOME/Wayland, KDE and
+            // a tiling WM.
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        };
 
-            cx.activate(true);
-        });
+        cx.open_window(options, move |_, cx| {
+            let progress = progress.clone();
+            let controller = controller.clone();
+            cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
+        })
+        .unwrap();
+
+        cx.activate(true);
+    });
 }

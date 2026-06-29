@@ -1,6 +1,6 @@
-use super::constants::{
+use super::theme::{
     ACTION_BUTTON_WIDTH, ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER, DISABLED_TEXT,
-    MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT,
+    MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT, SUCCESS_FILL,
 };
 use gpui::*;
 
@@ -9,11 +9,45 @@ pub fn surface_card() -> Div {
 }
 
 pub fn brand_mark() -> Div {
+    logo_mark(18., 27.)
+}
+
+pub fn logo_mark(width: f32, height: f32) -> Div {
+    let sx = width / 200.;
+    let sy = height / 300.;
+    let radius = (width * 0.06).max(1.);
+
     div()
-        .w(px(18.))
-        .h(px(27.))
+        .relative()
+        .w(px(width))
+        .h(px(height))
         .flex_none()
-        .child(img("logo.svg").w_full().h_full())
+        .overflow_hidden()
+        .child(logo_bar(0., 50., 25., 200., sx, sy, radius, 0x000000))
+        .child(logo_bar(34., 25., 23., 250., sx, sy, radius, 0x000000))
+        .child(logo_bar(66., 0., 68., 300., sx, sy, radius, 0x000000))
+        .child(logo_bar(100., 25., 66., 250., sx, sy, radius, 0x000000))
+        .child(logo_bar(134., 50., 66., 200., sx, sy, radius, SUCCESS_FILL))
+}
+
+fn logo_bar(
+    left: f32,
+    top: f32,
+    width: f32,
+    height: f32,
+    sx: f32,
+    sy: f32,
+    radius: f32,
+    color: u32,
+) -> Div {
+    div()
+        .absolute()
+        .left(px(left * sx))
+        .top(px(top * sy))
+        .w(px(width * sx))
+        .h(px(height * sy))
+        .rounded(px(radius))
+        .bg(rgb(color))
 }
 
 pub fn drag_region(content: impl IntoElement) -> impl IntoElement {

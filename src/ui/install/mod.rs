@@ -1,9 +1,17 @@
-use crate::context_menu::{self, ContextMenuInstallState};
+mod state;
+
+use crate::platform;
+use crate::ui::assets::register_fonts;
+use crate::ui::theme::{
+    BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG, MUTED_TEXT, SUCCESS_FILL,
+    SUCCESS_HOVER, TITLE_TEXT,
+};
+use crate::ui::widgets::logo_mark;
 use gpui::*;
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use state::{InstallOperation, InstallRenderState, start_operation};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use tokio::sync::Notify;
 
 const INSTALL_WINDOW_WIDTH: f32 = 300.0;
 const INSTALL_WINDOW_HEIGHT: f32 = 240.0;
@@ -12,67 +20,31 @@ const SIDE_PADDING: f32 = 24.0;
 const BUTTON_WIDTH: f32 = INSTALL_WINDOW_WIDTH - (SIDE_PADDING * 2.0);
 const BUTTON_HEIGHT: f32 = 39.0;
 
-const CARD_BG: u32 = 0xffffff;
-const TITLE_TEXT: u32 = 0x111111;
-const MUTED_TEXT: u32 = 0x999999;
-const SUCCESS_FILL: u32 = 0x22c55e;
-const SUCCESS_HOVER: u32 = 0x20b956;
-const BLACK_FILL: u32 = 0x000000;
-const BLACK_HOVER: u32 = 0x1a1a1a;
-const DISABLED_BG: u32 = 0xe5e5e5;
-const ERROR_TEXT: u32 = 0x8a8a8a;
-
-struct InstallAssets;
-
-impl AssetSource for InstallAssets {
-    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
-        Ok(match path {
-            "logo.svg" => Some(Cow::Borrowed(include_bytes!("../../logo.svg"))),
-            _ => None,
-        })
-    }
-
-    fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
-        Ok(if path.is_empty() {
-            vec![SharedString::from("logo.svg")]
-        } else {
-            Vec::new()
-        })
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum InstallOperation {
-    Install,
-    Uninstall,
-}
-
-#[derive(Clone)]
-struct InstallRenderState {
-    install_state: ContextMenuInstallState,
-    active_operation: Option<InstallOperation>,
-    message: String,
-    is_error: bool,
-}
-
-impl InstallRenderState {
-    fn is_busy(&self) -> bool {
-        self.active_operation.is_some()
-    }
-}
+// Vertical layout offsets (absolute px from the card top). Named so a font or
+// size change is a single edit instead of hunting scattered magic numbers.
+const DRAG_AREA_HEIGHT: f32 = 108.0;
+const STATUS_TOP: f32 = 128.0;
+const INSTALL_BUTTON_TOP: f32 = 150.0;
+const UNINSTALL_BUTTON_TOP: f32 = 197.0;
+/// Version label position on the short (not-installed/installing) window.
+const VERSION_TOP_COMPACT: f32 = 206.0;
+/// Version label position on the tall (installed/uninstalling) window.
+const VERSION_TOP_TALL: f32 = 252.0;
 
 pub struct InstallWindow {
     exe_path: PathBuf,
     state: Arc<Mutex<InstallRenderState>>,
+    notify: Arc<Notify>,
     refresh_loop_started: bool,
     close_guard_registered: bool,
 }
 
 impl InstallWindow {
-    fn new(exe_path: PathBuf, state: Arc<Mutex<InstallRenderState>>) -> Self {
+    fn new(exe_path: PathBuf, state: Arc<Mutex<InstallRenderState>>, notify: Arc<Notify>) -> Self {
         Self {
             exe_path,
             state,
+            notify,
             refresh_loop_started: false,
             close_guard_registered: false,
         }
@@ -84,16 +56,21 @@ impl InstallWindow {
         }
 
         self.refresh_loop_started = true;
+        let notify = self.notify.clone();
         window
             .spawn(cx, async move |cx| {
                 loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(120))
-                        .await;
+                    // Register before refreshing so a worker-thread update that
+                    // lands in between still wakes the next wait.
+                    let changed = notify.notified();
+                    futures::pin_mut!(changed);
+                    changed.as_mut().enable();
 
                     if cx.update(|window, _| window.refresh()).is_err() {
                         break;
                     }
+
+                    changed.await;
                 }
             })
             .detach();
@@ -122,6 +99,7 @@ impl Render for InstallWindow {
         window.resize(size(px(INSTALL_WINDOW_WIDTH), px(visual.window_height)));
 
         let state = self.state.clone();
+        let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let install_cta = install_action_button(
             "install-mcopy",
@@ -131,13 +109,19 @@ impl Render for InstallWindow {
             visual.install_hover,
             visual.install_text,
             move |_, window, _| {
-                if start_operation(state.clone(), exe_path.clone(), InstallOperation::Install) {
+                if start_operation(
+                    state.clone(),
+                    notify.clone(),
+                    exe_path.clone(),
+                    InstallOperation::Install,
+                ) {
                     window.refresh();
                 }
             },
         );
 
         let state = self.state.clone();
+        let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let uninstall_cta = install_action_button(
             "uninstall-mcopy",
@@ -147,7 +131,12 @@ impl Render for InstallWindow {
             BLACK_HOVER,
             CARD_BG,
             move |_, window, _| {
-                if start_operation(state.clone(), exe_path.clone(), InstallOperation::Uninstall) {
+                if start_operation(
+                    state.clone(),
+                    notify.clone(),
+                    exe_path.clone(),
+                    InstallOperation::Uninstall,
+                ) {
                     window.refresh();
                 }
             },
@@ -166,7 +155,7 @@ impl Render for InstallWindow {
                     .left(px(0.))
                     .top(px(0.))
                     .w_full()
-                    .h(px(108.))
+                    .h(px(DRAG_AREA_HEIGHT))
                     .window_control_area(WindowControlArea::Drag),
             )
             .child(header())
@@ -189,7 +178,7 @@ impl Render for InstallWindow {
                 div()
                     .absolute()
                     .left(px(SIDE_PADDING))
-                    .top(px(197.))
+                    .top(px(UNINSTALL_BUTTON_TOP))
                     .child(uninstall_cta),
             );
         }
@@ -219,42 +208,42 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             window_title: "mcopy - Installing",
             window_height: INSTALL_WINDOW_HEIGHT,
             status_line: Some("Installing".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Installing",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 206.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_COMPACT,
             show_uninstall: false,
         },
         Some(InstallOperation::Uninstall) => InstallVisual {
             window_title: "mcopy - Uninstalling",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Uninstalling".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 252.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_TALL,
             show_uninstall: true,
         },
         None if state.install_state.is_current_version() => InstallVisual {
             window_title: "mcopy - Already Installed",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Already installed".to_string()),
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: true,
-            install_background: DISABLED_BG,
-            install_hover: DISABLED_BG,
+            install_background: INSTALL_DISABLED_BG,
+            install_hover: INSTALL_DISABLED_BG,
             install_text: MUTED_TEXT,
-            install_button_top: 150.0,
-            version_top: 252.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_TALL,
             show_uninstall: true,
         },
         None => InstallVisual {
@@ -265,14 +254,14 @@ fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
             } else {
                 Some(state.message.clone())
             },
-            status_top: 128.0,
+            status_top: STATUS_TOP,
             install_label: "Install",
             install_disabled: false,
             install_background: SUCCESS_FILL,
             install_hover: SUCCESS_HOVER,
             install_text: CARD_BG,
-            install_button_top: 150.0,
-            version_top: 206.0,
+            install_button_top: INSTALL_BUTTON_TOP,
+            version_top: VERSION_TOP_COMPACT,
             show_uninstall: false,
         },
     }
@@ -287,7 +276,7 @@ fn header() -> Div {
                 .top(px(24.))
                 .w(px(27.))
                 .h(px(41.))
-                .child(img("logo.svg").w_full().h_full()),
+                .child(logo_mark(27., 41.)),
         )
         .child(
             div()
@@ -336,7 +325,7 @@ fn close_button(disabled: bool) -> impl IntoElement {
         base.hover(|this| this.bg(rgb(0xf5f5f5)).text_color(rgb(TITLE_TEXT)))
             .active(|this| this.bg(rgb(0xeeeeee)).text_color(rgb(TITLE_TEXT)))
             .cursor_pointer()
-            .on_click(|_, window, _| window.remove_window())
+            .on_click(|_, _, cx| cx.quit())
     }
 }
 
@@ -363,7 +352,7 @@ fn version_label(top: f32) -> Div {
         .text_size(px(11.))
         .line_height(px(14.))
         .text_color(rgb(MUTED_TEXT))
-        .child(format!("v{}", context_menu::CURRENT_VERSION))
+        .child(format!("v{}", platform::CURRENT_VERSION))
 }
 
 fn install_action_button(
@@ -401,177 +390,40 @@ fn install_action_button(
     }
 }
 
-fn start_operation(
-    state: Arc<Mutex<InstallRenderState>>,
-    exe_path: PathBuf,
-    operation: InstallOperation,
-) -> bool {
-    {
-        let mut state = state.lock().unwrap();
-        if state.is_busy() {
-            return false;
-        }
-
-        if operation == InstallOperation::Install && state.install_state.is_current_version() {
-            return false;
-        }
-
-        if operation == InstallOperation::Uninstall && !state.install_state.is_current_version() {
-            return false;
-        }
-
-        state.active_operation = Some(operation);
-        state.message.clear();
-        state.is_error = false;
-    }
-
-    std::thread::spawn(move || {
-        let result = match operation {
-            InstallOperation::Install => perform_install(&exe_path),
-            InstallOperation::Uninstall => perform_uninstall(&exe_path),
-        };
-        let refreshed_state = context_menu::context_menu_install_state();
-        let mut state = state.lock().unwrap();
-
-        state.active_operation = None;
-        if let Ok(install_state) = refreshed_state {
-            state.install_state = install_state;
-        }
-
-        match result {
-            Ok(()) => {
-                state.message.clear();
-                state.is_error = false;
-            }
-            Err(error) => {
-                state.message = format!("{}", error);
-                state.is_error = true;
-            }
-        }
-    });
-
-    true
-}
-
-fn perform_install(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "install");
-        }
-    }
-
-    context_menu::install_or_update_context_menu(exe_path)
-}
-
-fn perform_uninstall(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "uninstall");
-        }
-    }
-
-    context_menu::uninstall_context_menu()
-}
-
-#[cfg(target_os = "windows")]
-fn run_elevated_command(exe_path: &Path, command: &str) -> anyhow::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, INFINITE, WaitForSingleObject,
-    };
-    use windows_sys::Win32::UI::Shell::{
-        SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
-
-    let verb = wide_null("runas");
-    let file: Vec<u16> = exe_path.as_os_str().encode_wide().chain([0]).collect();
-    let parameters = wide_null(command);
-
-    let mut execute_info = SHELLEXECUTEINFOW {
-        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-        fMask: SEE_MASK_NOCLOSEPROCESS,
-        lpVerb: verb.as_ptr(),
-        lpFile: file.as_ptr(),
-        lpParameters: parameters.as_ptr(),
-        nShow: SW_HIDE,
-        ..Default::default()
-    };
-
-    let started = unsafe { ShellExecuteExW(&mut execute_info) };
-    if started == 0 {
-        let error = unsafe { GetLastError() };
-        anyhow::bail!("could not start elevated command: Windows error {}", error);
-    }
-
-    let mut exit_code = 0;
-    unsafe {
-        WaitForSingleObject(execute_info.hProcess, INFINITE);
-        GetExitCodeProcess(execute_info.hProcess, &mut exit_code);
-        CloseHandle(execute_info.hProcess);
-    }
-
-    if exit_code == 0 {
-        Ok(())
-    } else {
-        anyhow::bail!("elevated command exited with code {}", exit_code)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn wide_null(value: &str) -> Vec<u16> {
-    value.encode_utf16().chain([0]).collect()
-}
-
 pub fn show_install_window(exe_path: PathBuf) {
-    let state = context_menu::context_menu_install_state()
-        .map(|install_state| InstallRenderState {
-            install_state,
-            active_operation: None,
-            message: String::new(),
-            is_error: false,
-        })
-        .unwrap_or_else(|error| InstallRenderState {
-            install_state: ContextMenuInstallState::NotInstalled,
-            active_operation: None,
-            message: format!("{}", error),
-            is_error: true,
-        });
+    let state = InstallRenderState::probe();
     let window_height = if state.install_state.is_current_version() {
         INSTALLED_WINDOW_HEIGHT
     } else {
         INSTALL_WINDOW_HEIGHT
     };
     let state = Arc::new(Mutex::new(state));
+    let notify = Arc::new(Notify::new());
 
-    Application::new()
-        .with_assets(InstallAssets)
-        .run(move |cx| {
-            let bounds =
-                Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: None,
-                focus: true,
-                show: true,
-                kind: WindowKind::PopUp,
-                is_resizable: false,
-                is_minimizable: false,
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            };
+    Application::new().run(move |cx| {
+        register_fonts(cx);
+        let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: None,
+            focus: true,
+            show: true,
+            kind: WindowKind::PopUp,
+            is_resizable: false,
+            is_minimizable: false,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        };
 
-            cx.open_window(options, move |_, cx| {
-                let exe_path = exe_path.clone();
-                let state = state.clone();
-                cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone()))
-            })
-            .unwrap();
+        cx.open_window(options, move |_, cx| {
+            let exe_path = exe_path.clone();
+            let state = state.clone();
+            let notify = notify.clone();
+            cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone(), notify.clone()))
+        })
+        .unwrap();
 
-            cx.activate(true);
-        });
+        cx.activate(true);
+    });
 }

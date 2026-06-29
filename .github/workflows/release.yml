@@ -1,0 +1,72 @@
+name: release
+
+# Build release binaries on tested native GitHub-hosted runners and attach the
+# packaged outputs to a GitHub Release. Windows embeds its icon/manifest via
+# build.rs; macOS is packaged into a proper .app bundle. Code signing /
+# notarization is out of scope for now.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Package macOS .app
+        if: matrix.name == 'macos'
+        run: ./scripts/bundle-macos.sh
+
+      - name: Package Windows binary
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target\release\mcopy.exe dist\mcopy-windows-x86_64.exe
+          Compress-Archive -Path dist\mcopy-windows-x86_64.exe -DestinationPath dist\mcopy-windows-x86_64.zip -Force
+
+      - name: Package macOS app
+        if: matrix.name == 'macos'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
+
+      - name: Upload Windows artifact
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcopy-windows
+          path: dist/mcopy-windows-x86_64.zip
+
+      - name: Upload macOS artifact
+        if: matrix.name == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcopy-macos
+          path: dist/mcopy-macos.zip
+
+      - name: Attach assets to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip

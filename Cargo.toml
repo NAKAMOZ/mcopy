@@ -4,7 +4,7 @@ path = "src/main.rs"
 
 [package]
 name = "mcopy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -16,6 +16,7 @@ num_cpus = "1.16"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
 arboard = "3.6"  # Cross-platform clipboard
+dirs = "5"       # Per-user dir resolution (home, runtime, local data)
 
 # GPUI UI
 gpui = "0.2.2"

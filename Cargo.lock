@@ -3199,11 +3199,12 @@ dependencies = [
 
 [[package]]
 name = "mcopy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arboard",
  "clap",
+ "dirs 5.0.1",
  "embed-resource 2.5.2",
  "futures",
  "gpui",
