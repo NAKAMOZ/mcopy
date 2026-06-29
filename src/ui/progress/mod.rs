@@ -4,7 +4,7 @@ pub use state::CopyProgress;
 use state::CopyProgressSnapshot;
 
 use crate::CopyController;
-use crate::ui::assets::LogoAssets;
+use crate::ui::assets::{LogoAssets, register_fonts};
 use crate::ui::theme::{
     ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
     WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
@@ -284,6 +284,7 @@ fn resolve_visual_state(
 
 pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
     Application::new().with_assets(LogoAssets).run(move |cx| {
+        register_fonts(cx);
         let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

@@ -1,7 +1,7 @@
 mod state;
 
 use crate::platform;
-use crate::ui::assets::LogoAssets;
+use crate::ui::assets::{LogoAssets, register_fonts};
 use crate::ui::theme::{
     BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG, MUTED_TEXT, SUCCESS_FILL,
     SUCCESS_HOVER, TITLE_TEXT,
@@ -400,6 +400,7 @@ pub fn show_install_window(exe_path: PathBuf) {
     let notify = Arc::new(Notify::new());
 
     Application::new().with_assets(LogoAssets).run(move |cx| {
+        register_fonts(cx);
         let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
