@@ -374,6 +374,30 @@ cargo check
 cargo clippy --all-targets -- -W unused -W dead_code -W unused_imports
 ```
 
+### Release
+
+Releases are published by GitHub Actions when a `v*` tag is pushed. The release
+body is read from the matching section in `CHANGELOG.md`.
+
+Generate a changelog entry from commit subjects:
+
+```bash
+scripts/changelog.sh --write
+```
+
+Review and edit `CHANGELOG.md`, then commit it with the release changes. The
+release helper reads the version from `Cargo.toml`, checks that `CHANGELOG.md`
+contains that version, runs `cargo test --locked`, creates an annotated tag, and
+pushes it:
+
+```bash
+scripts/release.sh
+```
+
+Use `scripts/release.sh --dry-run` to preview the commands. The workflow builds
+packaged Windows and macOS artifacts, creates the GitHub Release, and uses the
+changelog section as the release notes.
+
 ### Suggested contributor reading order
 
 If you are new to the codebase, the best reading order is:

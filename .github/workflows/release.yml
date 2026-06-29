@@ -32,7 +32,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build (release)
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Package macOS .app
         if: matrix.name == 'macos'
@@ -50,23 +50,61 @@ jobs:
         if: matrix.name == 'macos'
         run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
 
-      - name: Upload Windows artifact
-        if: matrix.name == 'windows'
+      - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mcopy-windows
-          path: dist/mcopy-windows-x86_64.zip
+          name: mcopy-${{ matrix.name }}
+          path: dist/*.zip
 
-      - name: Upload macOS artifact
-        if: matrix.name == 'macos'
-        uses: actions/upload-artifact@v4
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            /^##[[:space:]]+/ {
+              heading = $0
+              sub(/^##[[:space:]]+/, "", heading)
+              sub(/[[:space:]].*$/, "", heading)
+              gsub(/^\[/, "", heading)
+              gsub(/\]$/, "", heading)
+
+              if (in_section) {
+                exit
+              }
+
+              if (heading == version || heading == "v" version) {
+                in_section = 1
+              }
+            }
+
+            in_section {
+              print
+            }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "CHANGELOG.md does not contain release notes for ${version}" >&2
+            exit 1
+          fi
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: mcopy-macos
-          path: dist/mcopy-macos.zip
+          path: dist
+          merge-multiple: true
 
-      - name: Attach assets to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             dist/*.zip
+          body_path: release-notes.md
+          make_latest: true
