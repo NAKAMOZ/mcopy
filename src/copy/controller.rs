@@ -18,24 +18,24 @@ impl CopyController {
 
     pub fn pause(&self) {
         if !self.is_cancelled() {
-            self.paused.store(true, Ordering::SeqCst);
+            self.paused.store(true, Ordering::Release);
         }
     }
 
     pub fn resume(&self) {
-        self.paused.store(false, Ordering::SeqCst);
+        self.paused.store(false, Ordering::Release);
     }
 
     pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::SeqCst);
+        self.cancelled.store(true, Ordering::Release);
     }
 
     pub fn is_paused(&self) -> bool {
-        self.paused.load(Ordering::SeqCst)
+        self.paused.load(Ordering::Acquire)
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::SeqCst)
+        self.cancelled.load(Ordering::Acquire)
     }
 
     pub(crate) async fn wait_until_resumed(&self) -> bool {

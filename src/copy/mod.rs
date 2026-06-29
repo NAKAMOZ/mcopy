@@ -52,7 +52,7 @@ pub async fn copy_files_with_progress(
             if let Some(cb) = callback {
                 cb(ProgressUpdate {
                     phase: ProgressPhase::Started,
-                    processed_files: files_processed.load(Ordering::SeqCst),
+                    processed_files: files_processed.load(Ordering::Relaxed),
                     file_name: file_name.clone(),
                     file_bytes: 0,
                 });
@@ -62,7 +62,7 @@ pub async fn copy_files_with_progress(
             // `metadata` stat is needed just to learn the size.
             match fs::copy(&src, &dst).await {
                 Ok(bytes) => {
-                    let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
+                    let processed = files_processed.fetch_add(1, Ordering::Relaxed) + 1;
 
                     if let Some(cb) = callback {
                         cb(ProgressUpdate {
@@ -76,7 +76,7 @@ pub async fn copy_files_with_progress(
                 Err(e) => {
                     eprintln!("ERROR: {:?} -> {:?} | {}", src, dst, e);
 
-                    let processed = files_processed.fetch_add(1, Ordering::SeqCst) + 1;
+                    let processed = files_processed.fetch_add(1, Ordering::Relaxed) + 1;
                     if let Some(cb) = callback {
                         cb(ProgressUpdate {
                             phase: ProgressPhase::Failed,
