@@ -2,7 +2,10 @@ mod session;
 
 use crate::normalize_path;
 use arboard::Clipboard;
-use session::{clear_timestamp, last_copy_time, now_epoch, set_last_copy_time};
+use session::{
+    clear_payload, clear_timestamp, last_copy_time, now_epoch, read_payload, set_last_copy_time,
+    write_payload,
+};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -26,7 +29,10 @@ pub fn copy_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
     }
 
     let text = abs_paths.join("\n");
-    clipboard.set_text(text)?;
+    // mcopy's own file is the source of truth; the system clipboard is a
+    // best-effort interop write (may fail headless / on Wayland w/o data-control).
+    write_payload(&text);
+    let _ = clipboard.set_text(text);
     set_last_copy_time();
     Ok(())
 }
@@ -42,7 +48,8 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
         None => true,
     };
 
-    // Reuse the previous clipboard payload when the session is still fresh.
+    // Reuse the previous payload when the session is still fresh. The payload
+    // file is authoritative; fall back to the system clipboard if it's gone.
     let mut existing = if should_clear {
         Vec::new()
     } else {
@@ -72,15 +79,25 @@ pub fn append_paths_to_clipboard(paths: &[PathBuf]) -> anyhow::Result<()> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    clipboard.set_text(text)?;
+    write_payload(&text);
+    let _ = clipboard.set_text(text);
     set_last_copy_time();
     Ok(())
 }
 
-/// Read newline-separated paths from the clipboard and keep only existing ones.
+/// Read newline-separated paths and keep only existing ones.
+///
+/// mcopy's own payload file is read first so copy→paste works even where the
+/// system clipboard didn't survive the `copy` process exiting (Linux). The
+/// system clipboard is only consulted when the payload file is absent/empty.
 pub fn paste_paths_from_clipboard() -> anyhow::Result<Vec<PathBuf>> {
-    let mut clipboard = Clipboard::new()?;
-    let text = clipboard.get_text()?;
+    let text = match read_payload() {
+        Some(text) if !text.trim().is_empty() => text,
+        _ => {
+            let mut clipboard = Clipboard::new()?;
+            clipboard.get_text().unwrap_or_default()
+        }
+    };
 
     if text.trim().is_empty() {
         return Ok(Vec::new());
@@ -97,9 +114,12 @@ pub fn paste_paths_from_clipboard() -> anyhow::Result<Vec<PathBuf>> {
 
 /// Clear the clipboard payload.
 pub fn clear_clipboard() -> anyhow::Result<()> {
-    let mut clipboard = Clipboard::new()?;
-    clipboard.set_text("")?;
-    // Remove the session timestamp too.
+    // Drop our own payload (source of truth) and the session timestamp.
+    clear_payload();
     clear_timestamp();
+    // Best-effort clear of the system clipboard too.
+    if let Ok(mut clipboard) = Clipboard::new() {
+        let _ = clipboard.set_text("");
+    }
     Ok(())
 }

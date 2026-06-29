@@ -6,6 +6,31 @@ fn timestamp_path() -> PathBuf {
     std::env::temp_dir().join("mcopy_session.tmp")
 }
 
+/// Path to mcopy's own payload file.
+///
+/// This is the source of truth for `paste`. The system clipboard is written too
+/// for interop, but on Linux a copied selection vanishes when the `copy` process
+/// exits (selection-ownership model), so this file is what makes copy→paste
+/// survive across processes on every platform.
+fn payload_path() -> PathBuf {
+    std::env::temp_dir().join("mcopy_payload.tmp")
+}
+
+/// Persist the newline-separated path payload.
+pub(super) fn write_payload(text: &str) {
+    let _ = std::fs::write(payload_path(), text);
+}
+
+/// Read the payload written by the last copy, if any.
+pub(super) fn read_payload() -> Option<String> {
+    std::fs::read_to_string(payload_path()).ok()
+}
+
+/// Remove the payload file.
+pub(super) fn clear_payload() {
+    let _ = std::fs::remove_file(payload_path());
+}
+
 /// Read the last copy timestamp in epoch seconds.
 pub(super) fn last_copy_time() -> Option<u64> {
     std::fs::read_to_string(timestamp_path())
