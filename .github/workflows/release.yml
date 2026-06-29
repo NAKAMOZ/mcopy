@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to publish, for example v0.2.0"
+        description: "Release tag to create or update, for example v0.2.0"
         required: true
         type: string
 
@@ -22,22 +22,22 @@ jobs:
   release-context:
     runs-on: ubuntu-latest
     outputs:
-      ref: ${{ steps.context.outputs.ref }}
+      checkout_ref: ${{ steps.context.outputs.checkout_ref }}
       tag: ${{ steps.context.outputs.tag }}
+      target_commitish: ${{ steps.context.outputs.target_commitish }}
       version: ${{ steps.context.outputs.version }}
     steps:
       - name: Resolve release tag
         id: context
         shell: bash
         env:
-          MANUAL_TAG: ${{ inputs.tag }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MANUAL_TAG: ${{ github.event.inputs.tag }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             tag="$MANUAL_TAG"
-            ref="$MANUAL_TAG"
           else
             tag="$GITHUB_REF_NAME"
-            ref="$GITHUB_REF"
           fi
 
           if [[ ! "$tag" =~ ^v[0-9]+[.][0-9]+[.][0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
@@ -45,9 +45,35 @@ jobs:
             exit 1
           fi
 
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag_status="$(
+              curl -sS -o /dev/null -w "%{http_code}" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"
+            )"
+
+            case "$tag_status" in
+              200)
+                checkout_ref="refs/tags/$tag"
+                ;;
+              404)
+                checkout_ref="$GITHUB_SHA"
+                echo "Tag $tag does not exist yet; the release will create it from $GITHUB_SHA."
+                ;;
+              *)
+                echo "Could not check release tag $tag; GitHub API returned HTTP $tag_status." >&2
+                exit 1
+                ;;
+            esac
+          else
+            checkout_ref="$GITHUB_REF"
+          fi
+
           {
-            echo "ref=$ref"
+            echo "checkout_ref=$checkout_ref"
             echo "tag=$tag"
+            echo "target_commitish=$GITHUB_SHA"
             echo "version=${tag#v}"
           } >> "$GITHUB_OUTPUT"
 
@@ -63,9 +89,20 @@ jobs:
             name: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.release-context.outputs.ref }}
+          ref: ${{ needs.release-context.outputs.checkout_ref }}
+
+      - name: Verify package version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+        run: |
+          package_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [ "$package_version" != "$RELEASE_VERSION" ]; then
+            echo "Cargo.toml version $package_version does not match release version $RELEASE_VERSION." >&2
+            exit 1
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -91,7 +128,7 @@ jobs:
         run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
 
       - name: Upload packaged artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mcopy-${{ matrix.name }}
           path: dist/*.zip
@@ -100,9 +137,9 @@ jobs:
     needs: [release-context, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.release-context.outputs.ref }}
+          ref: ${{ needs.release-context.outputs.checkout_ref }}
 
       - name: Extract release notes from CHANGELOG.md
         shell: bash
@@ -138,16 +175,17 @@ jobs:
           fi
 
       - name: Download packaged artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           fail_on_unmatched_files: true
           tag_name: ${{ needs.release-context.outputs.tag }}
+          target_commitish: ${{ needs.release-context.outputs.target_commitish }}
           files: |
             dist/*.zip
           body_path: release-notes.md

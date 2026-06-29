@@ -378,8 +378,10 @@ cargo clippy --all-targets -- -W unused -W dead_code -W unused_imports
 
 Releases are published by GitHub Actions when a `v*` tag is pushed. The release
 body is read from the matching section in `CHANGELOG.md`.
-Manual runs from the Actions UI require the existing release tag input, for
-example `v0.2.0`; the workflow checks out and publishes that tag.
+Manual runs from the Actions UI require a release tag input, for example
+`v0.2.0`. If the tag already exists, the workflow builds that tag. If it does
+not exist yet, the workflow builds the selected ref and creates the release tag
+from that commit.
 
 Generate a changelog entry from commit subjects:
 
