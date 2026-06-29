@@ -1,7 +1,10 @@
 use crate::ui::theme::AUTO_CLOSE_DELAY;
 use crate::{CopyController, ProgressPhase, ProgressUpdate};
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Instant,
 };
 
@@ -11,19 +14,41 @@ enum TerminalState {
     Cancelled,
 }
 
-struct CopyProgressState {
+/// Fields that genuinely need exclusive access (the current filename string and
+/// the terminal markers); the counters live in lock-free atomics alongside.
+struct CopyProgressShared {
     current_file: String,
-    completed_files: usize,
-    failed_files: usize,
-    active_files: usize,
-    total_files: usize,
     terminal_state: Option<TerminalState>,
     terminal_since: Option<Instant>,
 }
 
+struct CopyProgressInner {
+    completed_files: AtomicUsize,
+    failed_files: AtomicUsize,
+    active_files: AtomicUsize,
+    total_files: usize,
+    shared: Mutex<CopyProgressShared>,
+}
+
 #[derive(Clone)]
 pub struct CopyProgress {
-    state: Arc<Mutex<CopyProgressState>>,
+    inner: Arc<CopyProgressInner>,
+}
+
+/// Saturating decrement for an `AtomicUsize` (never wraps below zero).
+fn saturating_dec(counter: &AtomicUsize) {
+    let mut current = counter.load(Ordering::Relaxed);
+    while current > 0 {
+        match counter.compare_exchange_weak(
+            current,
+            current - 1,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return,
+            Err(observed) => current = observed,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -40,36 +65,42 @@ pub(crate) struct CopyProgressSnapshot {
 impl CopyProgress {
     pub fn new(total_files: usize) -> Self {
         Self {
-            state: Arc::new(Mutex::new(CopyProgressState {
-                current_file: String::new(),
-                completed_files: 0,
-                failed_files: 0,
-                active_files: 0,
+            inner: Arc::new(CopyProgressInner {
+                completed_files: AtomicUsize::new(0),
+                failed_files: AtomicUsize::new(0),
+                active_files: AtomicUsize::new(0),
                 total_files,
-                terminal_state: None,
-                terminal_since: None,
-            })),
+                shared: Mutex::new(CopyProgressShared {
+                    current_file: String::new(),
+                    terminal_state: None,
+                    terminal_since: None,
+                }),
+            }),
         }
     }
 
     pub fn apply(&self, update: ProgressUpdate) {
-        let mut state = self.state.lock().unwrap();
-
-        state.current_file = update.file_name;
+        // Lock only to store the filename and read the terminal flag; the
+        // counters are bumped lock-free.
+        let is_terminal = {
+            let mut shared = self.inner.shared.lock().unwrap();
+            shared.current_file = update.file_name;
+            shared.terminal_state.is_some()
+        };
 
         match update.phase {
             ProgressPhase::Started => {
-                if state.terminal_state.is_none() {
-                    state.active_files += 1;
+                if !is_terminal {
+                    self.inner.active_files.fetch_add(1, Ordering::Relaxed);
                 }
             }
             ProgressPhase::Finished => {
-                state.active_files = state.active_files.saturating_sub(1);
-                state.completed_files += 1;
+                saturating_dec(&self.inner.active_files);
+                self.inner.completed_files.fetch_add(1, Ordering::Relaxed);
             }
             ProgressPhase::Failed => {
-                state.active_files = state.active_files.saturating_sub(1);
-                state.failed_files += 1;
+                saturating_dec(&self.inner.active_files);
+                self.inner.failed_files.fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -83,16 +114,21 @@ impl CopyProgress {
     }
 
     pub(crate) fn snapshot(&self) -> CopyProgressSnapshot {
-        let state = self.state.lock().unwrap();
+        // Read the counters lock-free, then take the lock only for the filename
+        // and terminal markers.
+        let completed_files = self.inner.completed_files.load(Ordering::Relaxed);
+        let failed_files = self.inner.failed_files.load(Ordering::Relaxed);
+        let active_files = self.inner.active_files.load(Ordering::Relaxed);
 
+        let shared = self.inner.shared.lock().unwrap();
         CopyProgressSnapshot {
-            current_file: state.current_file.clone(),
-            completed_files: state.completed_files,
-            failed_files: state.failed_files,
-            active_files: state.active_files,
-            total_files: state.total_files,
-            terminal_state: state.terminal_state,
-            should_auto_close: state
+            current_file: shared.current_file.clone(),
+            completed_files,
+            failed_files,
+            active_files,
+            total_files: self.inner.total_files,
+            terminal_state: shared.terminal_state,
+            should_auto_close: shared
                 .terminal_since
                 .map(|instant| instant.elapsed() >= AUTO_CLOSE_DELAY)
                 .unwrap_or(false),
@@ -100,11 +136,11 @@ impl CopyProgress {
     }
 
     fn mark_terminal(&self, terminal_state: TerminalState) {
-        let mut state = self.state.lock().unwrap();
-        state.active_files = 0;
-        state.terminal_state = Some(terminal_state);
-        if state.terminal_since.is_none() {
-            state.terminal_since = Some(Instant::now());
+        self.inner.active_files.store(0, Ordering::Relaxed);
+        let mut shared = self.inner.shared.lock().unwrap();
+        shared.terminal_state = Some(terminal_state);
+        if shared.terminal_since.is_none() {
+            shared.terminal_since = Some(Instant::now());
         }
     }
 }
