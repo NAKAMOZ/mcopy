@@ -10,7 +10,7 @@ use gpui::*;
 use state::{InstallOperation, InstallRenderState, start_operation};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use tokio::sync::Notify;
 
 const INSTALL_WINDOW_WIDTH: f32 = 300.0;
 const INSTALL_WINDOW_HEIGHT: f32 = 240.0;
@@ -33,15 +33,17 @@ const VERSION_TOP_TALL: f32 = 252.0;
 pub struct InstallWindow {
     exe_path: PathBuf,
     state: Arc<Mutex<InstallRenderState>>,
+    notify: Arc<Notify>,
     refresh_loop_started: bool,
     close_guard_registered: bool,
 }
 
 impl InstallWindow {
-    fn new(exe_path: PathBuf, state: Arc<Mutex<InstallRenderState>>) -> Self {
+    fn new(exe_path: PathBuf, state: Arc<Mutex<InstallRenderState>>, notify: Arc<Notify>) -> Self {
         Self {
             exe_path,
             state,
+            notify,
             refresh_loop_started: false,
             close_guard_registered: false,
         }
@@ -53,16 +55,21 @@ impl InstallWindow {
         }
 
         self.refresh_loop_started = true;
+        let notify = self.notify.clone();
         window
             .spawn(cx, async move |cx| {
                 loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(120))
-                        .await;
+                    // Register before refreshing so a worker-thread update that
+                    // lands in between still wakes the next wait.
+                    let changed = notify.notified();
+                    futures::pin_mut!(changed);
+                    changed.as_mut().enable();
 
                     if cx.update(|window, _| window.refresh()).is_err() {
                         break;
                     }
+
+                    changed.await;
                 }
             })
             .detach();
@@ -91,6 +98,7 @@ impl Render for InstallWindow {
         window.resize(size(px(INSTALL_WINDOW_WIDTH), px(visual.window_height)));
 
         let state = self.state.clone();
+        let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let install_cta = install_action_button(
             "install-mcopy",
@@ -100,13 +108,19 @@ impl Render for InstallWindow {
             visual.install_hover,
             visual.install_text,
             move |_, window, _| {
-                if start_operation(state.clone(), exe_path.clone(), InstallOperation::Install) {
+                if start_operation(
+                    state.clone(),
+                    notify.clone(),
+                    exe_path.clone(),
+                    InstallOperation::Install,
+                ) {
                     window.refresh();
                 }
             },
         );
 
         let state = self.state.clone();
+        let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let uninstall_cta = install_action_button(
             "uninstall-mcopy",
@@ -116,7 +130,12 @@ impl Render for InstallWindow {
             BLACK_HOVER,
             CARD_BG,
             move |_, window, _| {
-                if start_operation(state.clone(), exe_path.clone(), InstallOperation::Uninstall) {
+                if start_operation(
+                    state.clone(),
+                    notify.clone(),
+                    exe_path.clone(),
+                    InstallOperation::Uninstall,
+                ) {
                     window.refresh();
                 }
             },
@@ -378,6 +397,7 @@ pub fn show_install_window(exe_path: PathBuf) {
         INSTALL_WINDOW_HEIGHT
     };
     let state = Arc::new(Mutex::new(state));
+    let notify = Arc::new(Notify::new());
 
     Application::new().with_assets(LogoAssets).run(move |cx| {
         let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
@@ -397,7 +417,8 @@ pub fn show_install_window(exe_path: PathBuf) {
         cx.open_window(options, move |_, cx| {
             let exe_path = exe_path.clone();
             let state = state.clone();
-            cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone()))
+            let notify = notify.clone();
+            cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone(), notify.clone()))
         })
         .unwrap();
 

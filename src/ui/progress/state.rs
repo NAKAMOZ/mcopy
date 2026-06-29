@@ -7,6 +7,7 @@ use std::{
     },
     time::Instant,
 };
+use tokio::sync::{Notify, futures::Notified};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TerminalState {
@@ -28,6 +29,9 @@ struct CopyProgressInner {
     active_files: AtomicUsize,
     total_files: usize,
     shared: Mutex<CopyProgressShared>,
+    /// Wakes the UI refresh loop when the state actually changes, replacing the
+    /// blind fixed-interval repaint.
+    notify: Notify,
 }
 
 #[derive(Clone)]
@@ -75,8 +79,15 @@ impl CopyProgress {
                     terminal_state: None,
                     terminal_since: None,
                 }),
+                notify: Notify::new(),
             }),
         }
+    }
+
+    /// Future that resolves the next time the state changes. The UI awaits this
+    /// instead of polling on a timer.
+    pub(crate) fn notified(&self) -> Notified<'_> {
+        self.inner.notify.notified()
     }
 
     pub fn apply(&self, update: ProgressUpdate) {
@@ -103,6 +114,8 @@ impl CopyProgress {
                 self.inner.failed_files.fetch_add(1, Ordering::Relaxed);
             }
         }
+
+        self.inner.notify.notify_waiters();
     }
 
     pub fn complete(&self) {
@@ -137,11 +150,15 @@ impl CopyProgress {
 
     fn mark_terminal(&self, terminal_state: TerminalState) {
         self.inner.active_files.store(0, Ordering::Relaxed);
-        let mut shared = self.inner.shared.lock().unwrap();
-        shared.terminal_state = Some(terminal_state);
-        if shared.terminal_since.is_none() {
-            shared.terminal_since = Some(Instant::now());
+        {
+            let mut shared = self.inner.shared.lock().unwrap();
+            shared.terminal_state = Some(terminal_state);
+            if shared.terminal_since.is_none() {
+                shared.terminal_since = Some(Instant::now());
+            }
         }
+
+        self.inner.notify.notify_waiters();
     }
 }
 

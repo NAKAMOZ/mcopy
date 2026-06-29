@@ -1,6 +1,7 @@
 use crate::platform::{self, ContextMenu, ContextMenuInstallState, Platform};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallOperation {
@@ -43,6 +44,7 @@ impl InstallRenderState {
 /// starting anything) when the operation is not applicable right now.
 pub(crate) fn start_operation(
     state: Arc<Mutex<InstallRenderState>>,
+    notify: Arc<Notify>,
     exe_path: PathBuf,
     operation: InstallOperation,
 ) -> bool {
@@ -88,6 +90,10 @@ pub(crate) fn start_operation(
                 state.is_error = true;
             }
         }
+        drop(state);
+
+        // Wake the UI loop so it repaints the finished result.
+        notify.notify_waiters();
     });
 
     true

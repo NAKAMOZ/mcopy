@@ -44,11 +44,14 @@ impl ProgressWindow {
         window
             .spawn(cx, async move |cx| {
                 loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(120))
-                        .await;
+                    // Register for the next state change *before* reading the
+                    // snapshot so a change landing in between is not missed.
+                    let changed = progress.notified();
+                    futures::pin_mut!(changed);
+                    changed.as_mut().enable();
 
-                    let should_close = progress.snapshot().should_auto_close;
+                    let snapshot = progress.snapshot();
+                    let should_close = snapshot.should_auto_close;
                     let updated = cx.update(|window, _| {
                         if should_close {
                             window.remove_window();
@@ -59,6 +62,19 @@ impl ProgressWindow {
 
                     if updated.is_err() || should_close {
                         break;
+                    }
+
+                    if snapshot.is_terminal() {
+                        // A time-based auto-close is counting down: wake on the
+                        // next change or a short timer to re-check the deadline.
+                        let timer = cx
+                            .background_executor()
+                            .timer(Duration::from_millis(120));
+                        futures::pin_mut!(timer);
+                        futures::future::select(changed, timer).await;
+                    } else {
+                        // Otherwise repaint only when the state actually changes.
+                        changed.await;
                     }
                 }
             })
@@ -113,12 +129,15 @@ impl Render for ProgressWindow {
             visual.primary_label,
             visual.primary_tone,
             pause_disabled,
-            move |_, _, _| {
+            move |_, window, _| {
                 if pause_controller.is_paused() {
                     pause_controller.resume();
                 } else {
                     pause_controller.pause();
                 }
+                // Controller changes don't flow through progress.notify, so
+                // repaint the toggle immediately.
+                window.refresh();
             },
         );
 
@@ -128,7 +147,10 @@ impl Render for ProgressWindow {
             "Cancel",
             ButtonTone::Outline,
             cancel_disabled,
-            move |_, _, _| cancel_controller.cancel(),
+            move |_, window, _| {
+                cancel_controller.cancel();
+                window.refresh();
+            },
         );
 
         let message = if snapshot.failed_files > 0 {
