@@ -3204,6 +3204,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "clap",
+ "dirs 5.0.1",
  "embed-resource 2.5.2",
  "futures",
  "gpui",
