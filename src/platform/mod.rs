@@ -23,11 +23,15 @@ mod windows;
 pub trait ContextMenu {
     fn install(exe_path: &Path) -> anyhow::Result<()> {
         let _ = exe_path;
-        anyhow::bail!("Context menu integration is not supported on this platform")
+        anyhow::bail!(
+            "Context menu integration is not supported on this platform"
+        )
     }
 
     fn uninstall() -> anyhow::Result<()> {
-        anyhow::bail!("Context menu integration is not supported on this platform")
+        anyhow::bail!(
+            "Context menu integration is not supported on this platform"
+        )
     }
 
     fn state() -> anyhow::Result<ContextMenuInstallState> {
@@ -36,13 +40,25 @@ pub trait ContextMenu {
 }
 
 /// Fallback used on platforms without a dedicated implementation.
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "macos",
+    target_os = "linux"
+)))]
 pub struct Unsupported;
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "macos",
+    target_os = "linux"
+)))]
 impl ContextMenu for Unsupported {}
 
 // The single `#[cfg]` selection point for the active OS implementation.
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "macos",
+    target_os = "linux"
+)))]
 pub use Unsupported as Platform;
 #[cfg(target_os = "linux")]
 pub use linux::LinuxMenu as Platform;

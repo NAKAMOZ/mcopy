@@ -60,7 +60,8 @@ pub async fn copy_files_with_progress(
 
             match copy_item(&item).await {
                 Ok(bytes) => {
-                    let processed = items_processed.fetch_add(1, Ordering::Relaxed) + 1;
+                    let processed =
+                        items_processed.fetch_add(1, Ordering::Relaxed) + 1;
 
                     if let Some(cb) = callback {
                         cb(ProgressUpdate {
@@ -70,11 +71,15 @@ pub async fn copy_files_with_progress(
                             file_bytes: bytes,
                         });
                     }
-                }
+                },
                 Err(e) => {
-                    eprintln!("ERROR: {:?} -> {:?} | {}", item.src, item.dst, e);
+                    eprintln!(
+                        "ERROR: {:?} -> {:?} | {}",
+                        item.src, item.dst, e
+                    );
 
-                    let processed = items_processed.fetch_add(1, Ordering::Relaxed) + 1;
+                    let processed =
+                        items_processed.fetch_add(1, Ordering::Relaxed) + 1;
                     if let Some(cb) = callback {
                         cb(ProgressUpdate {
                             phase: ProgressPhase::Failed,
@@ -83,7 +88,7 @@ pub async fn copy_files_with_progress(
                             file_bytes: 0,
                         });
                     }
-                }
+                },
             }
         }
     }))
@@ -100,11 +105,11 @@ async fn copy_item(item: &CopyItem) -> anyhow::Result<u64> {
             // `fs::copy` returns the byte count, so no separate `metadata` stat
             // is needed just to learn the size.
             Ok(fs::copy(&item.src, &item.dst).await?)
-        }
+        },
         CopyItemKind::Directory => {
             fs::create_dir_all(&item.dst).await?;
             Ok(0)
-        }
+        },
         CopyItemKind::Symlink {
             target,
             target_is_dir,
@@ -112,11 +117,13 @@ async fn copy_item(item: &CopyItem) -> anyhow::Result<u64> {
             remove_existing_file_or_symlink(&item.dst).await?;
             create_symlink(target, &item.dst, *target_is_dir).await?;
             Ok(0)
-        }
+        },
     }
 }
 
-async fn remove_existing_file_or_symlink(path: &std::path::Path) -> anyhow::Result<()> {
+async fn remove_existing_file_or_symlink(
+    path: &std::path::Path,
+) -> anyhow::Result<()> {
     let Ok(metadata) = fs::symlink_metadata(path).await else {
         return Ok(());
     };

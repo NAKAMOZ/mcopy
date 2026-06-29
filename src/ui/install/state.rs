@@ -54,11 +54,15 @@ pub(crate) fn start_operation(
             return false;
         }
 
-        if operation == InstallOperation::Install && state.install_state.is_current_version() {
+        if operation == InstallOperation::Install
+            && state.install_state.is_current_version()
+        {
             return false;
         }
 
-        if operation == InstallOperation::Uninstall && !state.install_state.is_current_version() {
+        if operation == InstallOperation::Uninstall
+            && !state.install_state.is_current_version()
+        {
             return false;
         }
 
@@ -84,11 +88,11 @@ pub(crate) fn start_operation(
             Ok(()) => {
                 state.message.clear();
                 state.is_error = false;
-            }
+            },
             Err(error) => {
                 state.message = format!("{}", error);
                 state.is_error = true;
-            }
+            },
         }
         drop(state);
 
@@ -135,7 +139,8 @@ fn run_elevated_command(exe_path: &Path, command: &str) -> anyhow::Result<()> {
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     let verb = wide_null("runas");
-    let file: Vec<u16> = exe_path.as_os_str().encode_wide().chain([0]).collect();
+    let file: Vec<u16> =
+        exe_path.as_os_str().encode_wide().chain([0]).collect();
     let parameters = wide_null(command);
 
     let mut execute_info = SHELLEXECUTEINFOW {
@@ -151,7 +156,10 @@ fn run_elevated_command(exe_path: &Path, command: &str) -> anyhow::Result<()> {
     let started = unsafe { ShellExecuteExW(&mut execute_info) };
     if started == 0 {
         let error = unsafe { GetLastError() };
-        anyhow::bail!("could not start elevated command: Windows error {}", error);
+        anyhow::bail!(
+            "could not start elevated command: Windows error {}",
+            error
+        );
     }
 
     let mut exit_code = 0;

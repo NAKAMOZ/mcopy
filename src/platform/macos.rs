@@ -26,10 +26,20 @@ impl ContextMenu for MacosMenu {
             .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
 
         // mcopy Copy workflow
-        create_automator_workflow(&services_dir, COPY_SERVICE_NAME, exe_str, "copy")?;
+        create_automator_workflow(
+            &services_dir,
+            COPY_SERVICE_NAME,
+            exe_str,
+            "copy",
+        )?;
 
         // mcopy Paste workflow
-        create_automator_workflow(&services_dir, PASTE_SERVICE_NAME, exe_str, "paste")?;
+        create_automator_workflow(
+            &services_dir,
+            PASTE_SERVICE_NAME,
+            exe_str,
+            "paste",
+        )?;
 
         write_install_metadata(&home)?;
 
@@ -41,7 +51,9 @@ impl ContextMenu for MacosMenu {
 
         println!("✓ Finder Services installed successfully!");
         println!("  Location: {}", services_dir.display());
-        println!("  Note: Enable them in System Preferences > Keyboard > Shortcuts > Services");
+        println!(
+            "  Note: Enable them in System Preferences > Keyboard > Shortcuts > Services"
+        );
         Ok(())
     }
 
@@ -74,8 +86,12 @@ impl ContextMenu for MacosMenu {
         if let Ok(version) = fs::read_to_string(&version_path) {
             let version = version.trim().to_string();
             if !version.is_empty() {
-                if version == CURRENT_VERSION && !workflows_are_current(&services_dir) {
-                    return Ok(ContextMenuInstallState::Installed { version: None });
+                if version == CURRENT_VERSION
+                    && !workflows_are_current(&services_dir)
+                {
+                    return Ok(ContextMenuInstallState::Installed {
+                        version: None,
+                    });
                 }
 
                 return Ok(ContextMenuInstallState::Installed {
@@ -100,7 +116,9 @@ impl ContextMenu for MacosMenu {
 fn home_dir() -> anyhow::Result<String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().into_owned())
-        .ok_or_else(|| anyhow::anyhow!("Could not determine the home directory"))
+        .ok_or_else(|| {
+            anyhow::anyhow!("Could not determine the home directory")
+        })
 }
 
 fn write_install_metadata(home: &str) -> anyhow::Result<()> {

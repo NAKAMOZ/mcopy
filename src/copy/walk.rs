@@ -38,7 +38,12 @@ impl CopyItem {
         }
     }
 
-    fn symlink(src: PathBuf, dst: PathBuf, target: PathBuf, target_is_dir: bool) -> Self {
+    fn symlink(
+        src: PathBuf,
+        dst: PathBuf,
+        target: PathBuf,
+        target_is_dir: bool,
+    ) -> Self {
         Self {
             src,
             dst,
@@ -51,7 +56,10 @@ impl CopyItem {
 }
 
 /// Collect filesystem items recursively from a file or directory source.
-pub async fn collect_files(src_root: &Path, dst_root: &Path) -> anyhow::Result<Vec<CopyItem>> {
+pub async fn collect_files(
+    src_root: &Path,
+    dst_root: &Path,
+) -> anyhow::Result<Vec<CopyItem>> {
     // Check whether the source is a file or a directory.
     let metadata = fs::symlink_metadata(src_root).await?;
 
@@ -95,15 +103,17 @@ pub async fn collect_files(src_root: &Path, dst_root: &Path) -> anyhow::Result<V
 
     // Bound the fan-out to keep open file descriptors in check on huge trees.
     let concurrency = calculate_concurrency(None);
-    let mut current_level: Vec<(PathBuf, PathBuf)> = vec![(src_root.to_path_buf(), initial_dst)];
+    let mut current_level: Vec<(PathBuf, PathBuf)> =
+        vec![(src_root.to_path_buf(), initial_dst)];
 
     while !current_level.is_empty() {
         // Read every directory at this level concurrently.
-        let level_results: Vec<anyhow::Result<DirContents>> = stream::iter(current_level)
-            .map(|(src, dst)| read_dir_contents(src, dst))
-            .buffer_unordered(concurrency)
-            .collect()
-            .await;
+        let level_results: Vec<anyhow::Result<DirContents>> =
+            stream::iter(current_level)
+                .map(|(src, dst)| read_dir_contents(src, dst))
+                .buffer_unordered(concurrency)
+                .collect()
+                .await;
 
         let mut next_level = Vec::new();
         for contents in level_results {
@@ -125,7 +135,10 @@ struct DirContents {
 }
 
 /// Read one directory, mapping each entry's source path to its destination.
-async fn read_dir_contents(src: PathBuf, dst: PathBuf) -> anyhow::Result<DirContents> {
+async fn read_dir_contents(
+    src: PathBuf,
+    dst: PathBuf,
+) -> anyhow::Result<DirContents> {
     let mut items = Vec::new();
     let mut subdirs = Vec::new();
     let mut dir = fs::read_dir(&src).await?;
@@ -133,14 +146,16 @@ async fn read_dir_contents(src: PathBuf, dst: PathBuf) -> anyhow::Result<DirCont
     while let Some(entry) = dir.next_entry().await? {
         let entry_path = entry.path();
         let file_type = entry.file_type().await?;
-        let dst_entry = dst.join(
-            entry_path
-                .file_name()
-                .ok_or_else(|| anyhow::anyhow!("Could not read the entry name"))?,
-        );
+        let dst_entry =
+            dst.join(entry_path.file_name().ok_or_else(|| {
+                anyhow::anyhow!("Could not read the entry name")
+            })?);
 
         if file_type.is_dir() {
-            items.push(CopyItem::directory(entry_path.clone(), dst_entry.clone()));
+            items.push(CopyItem::directory(
+                entry_path.clone(),
+                dst_entry.clone(),
+            ));
             subdirs.push((entry_path, dst_entry));
         } else if file_type.is_file() {
             items.push(CopyItem::file(entry_path, dst_entry));

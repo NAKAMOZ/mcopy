@@ -47,18 +47,23 @@ impl ContextMenu for LinuxMenu {
         let home = home_dir()?;
 
         // Nautilus.
-        let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
+        let nautilus_dir =
+            PathBuf::from(&home).join(".local/share/nautilus/scripts");
         let _ = fs::remove_file(nautilus_dir.join("mcopy-copy"));
         let _ = fs::remove_file(nautilus_dir.join("mcopy-paste"));
 
         // Dolphin (Plasma 5 and 6 paths).
         for dir in DOLPHIN_SERVICE_DIRS {
-            let _ = fs::remove_file(PathBuf::from(&home).join(dir).join("mcopy.desktop"));
+            let _ = fs::remove_file(
+                PathBuf::from(&home).join(dir).join("mcopy.desktop"),
+            );
         }
 
         // Thunar uses `uca.xml`, which is more complicated to edit safely.
         println!("✓ Nautilus and Dolphin integration removed!");
-        println!("  Note: Remove the Thunar actions manually from Edit > Configure custom actions");
+        println!(
+            "  Note: Remove the Thunar actions manually from Edit > Configure custom actions"
+        );
 
         remove_install_metadata(&home)?;
 
@@ -78,10 +83,14 @@ impl ContextMenu for LinuxMenu {
             }
         }
 
-        let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
-        let dolphin_installed = DOLPHIN_SERVICE_DIRS
-            .iter()
-            .any(|dir| PathBuf::from(&home).join(dir).join("mcopy.desktop").exists());
+        let nautilus_dir =
+            PathBuf::from(&home).join(".local/share/nautilus/scripts");
+        let dolphin_installed = DOLPHIN_SERVICE_DIRS.iter().any(|dir| {
+            PathBuf::from(&home)
+                .join(dir)
+                .join("mcopy.desktop")
+                .exists()
+        });
 
         if nautilus_dir.join("mcopy-copy").exists()
             || nautilus_dir.join("mcopy-paste").exists()
@@ -99,7 +108,9 @@ impl ContextMenu for LinuxMenu {
 fn home_dir() -> anyhow::Result<String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().into_owned())
-        .ok_or_else(|| anyhow::anyhow!("Could not determine the home directory"))
+        .ok_or_else(|| {
+            anyhow::anyhow!("Could not determine the home directory")
+        })
 }
 
 fn write_install_metadata(home: &str) -> anyhow::Result<()> {

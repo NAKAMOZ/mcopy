@@ -6,12 +6,13 @@ use state::CopyProgressSnapshot;
 use crate::CopyController;
 use crate::ui::assets::register_fonts;
 use crate::ui::theme::{
-    ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL, TITLE_TEXT,
-    WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
+    ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL,
+    TITLE_TEXT, WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 use crate::ui::widgets::{
-    action_button, brand_mark, controls_row, counter_display, drag_region, file_name_row,
-    header_row, message_banner, progress_bar, status_text, surface_card,
+    action_button, brand_mark, controls_row, counter_display, drag_region,
+    file_name_row, header_row, message_banner, progress_bar, status_text,
+    surface_card,
 };
 use gpui::*;
 use std::time::Duration;
@@ -33,7 +34,11 @@ impl ProgressWindow {
         }
     }
 
-    fn ensure_refresh_loop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn ensure_refresh_loop(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.refresh_loop_started {
             return;
         }
@@ -67,7 +72,9 @@ impl ProgressWindow {
                     if snapshot.is_terminal() {
                         // A time-based auto-close is counting down: wake on the
                         // next change or a short timer to re-check the deadline.
-                        let timer = cx.background_executor().timer(Duration::from_millis(120));
+                        let timer = cx
+                            .background_executor()
+                            .timer(Duration::from_millis(120));
                         futures::pin_mut!(timer);
                         futures::future::select(changed, timer).await;
                     } else {
@@ -79,7 +86,11 @@ impl ProgressWindow {
             .detach();
     }
 
-    fn ensure_close_guard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn ensure_close_guard(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.close_guard_registered {
             return;
         }
@@ -100,7 +111,11 @@ impl ProgressWindow {
 }
 
 impl Render for ProgressWindow {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         self.ensure_refresh_loop(window, cx);
         self.ensure_close_guard(window, cx);
 
@@ -108,7 +123,8 @@ impl Render for ProgressWindow {
         let pause_disabled = snapshot.is_terminal()
             || self.controller.is_cancelled()
             || (snapshot.processed_files() == 0 && snapshot.active_files == 0);
-        let cancel_disabled = snapshot.is_terminal() || self.controller.is_cancelled();
+        let cancel_disabled =
+            snapshot.is_terminal() || self.controller.is_cancelled();
         let visual = resolve_visual_state(&snapshot, &self.controller);
         let file_display = if snapshot.current_file.is_empty() {
             visual.file_placeholder.to_string()
@@ -196,7 +212,10 @@ impl Render for ProgressWindow {
                                     visual.counter_secondary_color,
                                 ),
                             ))
-                            .child(progress_bar(snapshot.percent(), visual.progress_fill))
+                            .child(progress_bar(
+                                snapshot.percent(),
+                                visual.progress_fill,
+                            ))
                             .child(file_name_row(file_display)),
                     ))
                     .child(message_banner(message))
@@ -280,7 +299,10 @@ fn resolve_visual_state(
     }
 }
 
-pub fn show_progress_window(progress: CopyProgress, controller: CopyController) {
+pub fn show_progress_window(
+    progress: CopyProgress,
+    controller: CopyController,
+) {
     Application::new().run(move |cx| {
         register_fonts(cx);
         cx.on_window_closed(|cx| {
@@ -290,7 +312,11 @@ pub fn show_progress_window(progress: CopyProgress, controller: CopyController) 
         })
         .detach();
 
-        let bounds = Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx);
+        let bounds = Bounds::centered(
+            None,
+            size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)),
+            cx,
+        );
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: None,
@@ -311,7 +337,9 @@ pub fn show_progress_window(progress: CopyProgress, controller: CopyController) 
         cx.open_window(options, move |_, cx| {
             let progress = progress.clone();
             let controller = controller.clone();
-            cx.new(move |_| ProgressWindow::new(progress.clone(), controller.clone()))
+            cx.new(move |_| {
+                ProgressWindow::new(progress.clone(), controller.clone())
+            })
         })
         .unwrap();
 

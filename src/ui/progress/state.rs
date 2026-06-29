@@ -104,15 +104,15 @@ impl CopyProgress {
                 if !is_terminal {
                     self.inner.active_files.fetch_add(1, Ordering::Relaxed);
                 }
-            }
+            },
             ProgressPhase::Finished => {
                 saturating_dec(&self.inner.active_files);
                 self.inner.completed_files.fetch_add(1, Ordering::Relaxed);
-            }
+            },
             ProgressPhase::Failed => {
                 saturating_dec(&self.inner.active_files);
                 self.inner.failed_files.fetch_add(1, Ordering::Relaxed);
-            }
+            },
         }
 
         self.inner.notify.notify_waiters();
@@ -129,7 +129,8 @@ impl CopyProgress {
     pub(crate) fn snapshot(&self) -> CopyProgressSnapshot {
         // Read the counters lock-free, then take the lock only for the filename
         // and terminal markers.
-        let completed_files = self.inner.completed_files.load(Ordering::Relaxed);
+        let completed_files =
+            self.inner.completed_files.load(Ordering::Relaxed);
         let failed_files = self.inner.failed_files.load(Ordering::Relaxed);
         let active_files = self.inner.active_files.load(Ordering::Relaxed);
 
@@ -183,11 +184,13 @@ impl CopyProgressSnapshot {
         match self.terminal_state {
             Some(TerminalState::Completed) => "mcopy - Completed".to_string(),
             Some(TerminalState::Cancelled) => "mcopy - Cancelled".to_string(),
-            None if controller.is_cancelled() => "mcopy - Cancelling".to_string(),
+            None if controller.is_cancelled() => {
+                "mcopy - Cancelling".to_string()
+            },
             None if controller.is_paused() => "mcopy - Paused".to_string(),
             None if self.processed_files() == 0 && self.active_files == 0 => {
                 "mcopy - Preparing".to_string()
-            }
+            },
             None => "mcopy - Copying".to_string(),
         }
     }

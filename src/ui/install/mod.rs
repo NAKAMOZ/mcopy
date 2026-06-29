@@ -3,8 +3,8 @@ mod state;
 use crate::platform;
 use crate::ui::assets::register_fonts;
 use crate::ui::theme::{
-    BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG, MUTED_TEXT, SUCCESS_FILL,
-    SUCCESS_HOVER, TITLE_TEXT,
+    BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG,
+    MUTED_TEXT, SUCCESS_FILL, SUCCESS_HOVER, TITLE_TEXT,
 };
 use crate::ui::widgets::logo_mark;
 use gpui::*;
@@ -40,7 +40,11 @@ pub struct InstallWindow {
 }
 
 impl InstallWindow {
-    fn new(exe_path: PathBuf, state: Arc<Mutex<InstallRenderState>>, notify: Arc<Notify>) -> Self {
+    fn new(
+        exe_path: PathBuf,
+        state: Arc<Mutex<InstallRenderState>>,
+        notify: Arc<Notify>,
+    ) -> Self {
         Self {
             exe_path,
             state,
@@ -50,7 +54,11 @@ impl InstallWindow {
         }
     }
 
-    fn ensure_refresh_loop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn ensure_refresh_loop(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.refresh_loop_started {
             return;
         }
@@ -76,19 +84,29 @@ impl InstallWindow {
             .detach();
     }
 
-    fn ensure_close_guard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn ensure_close_guard(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.close_guard_registered {
             return;
         }
 
         self.close_guard_registered = true;
         let state = self.state.clone();
-        window.on_window_should_close(cx, move |_, _| !state.lock().unwrap().is_busy());
+        window.on_window_should_close(cx, move |_, _| {
+            !state.lock().unwrap().is_busy()
+        });
     }
 }
 
 impl Render for InstallWindow {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         self.ensure_refresh_loop(window, cx);
         self.ensure_close_guard(window, cx);
 
@@ -170,7 +188,11 @@ impl Render for InstallWindow {
             .child(version_label(visual.version_top));
 
         if let Some(status) = visual.status_line {
-            card = card.child(status_label(status, snapshot.is_error, visual.status_top));
+            card = card.child(status_label(
+                status,
+                snapshot.is_error,
+                visual.status_top,
+            ));
         }
 
         if visual.show_uninstall {
@@ -402,7 +424,11 @@ pub fn show_install_window(exe_path: PathBuf) {
 
     Application::new().run(move |cx| {
         register_fonts(cx);
-        let bounds = Bounds::centered(None, size(px(INSTALL_WINDOW_WIDTH), px(window_height)), cx);
+        let bounds = Bounds::centered(
+            None,
+            size(px(INSTALL_WINDOW_WIDTH), px(window_height)),
+            cx,
+        );
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: None,
@@ -420,7 +446,13 @@ pub fn show_install_window(exe_path: PathBuf) {
             let exe_path = exe_path.clone();
             let state = state.clone();
             let notify = notify.clone();
-            cx.new(move |_| InstallWindow::new(exe_path.clone(), state.clone(), notify.clone()))
+            cx.new(move |_| {
+                InstallWindow::new(
+                    exe_path.clone(),
+                    state.clone(),
+                    notify.clone(),
+                )
+            })
         })
         .unwrap();
 

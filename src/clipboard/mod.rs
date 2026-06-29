@@ -3,8 +3,8 @@ mod session;
 use crate::normalize_path;
 use arboard::Clipboard;
 use session::{
-    clear_payload, clear_timestamp, last_copy_time, now_epoch, read_payload, set_last_copy_time,
-    write_payload,
+    clear_payload, clear_timestamp, last_copy_time, now_epoch, read_payload,
+    set_last_copy_time, write_payload,
 };
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -96,7 +96,7 @@ pub fn paste_paths_from_clipboard() -> anyhow::Result<Vec<PathBuf>> {
         _ => {
             let mut clipboard = Clipboard::new()?;
             clipboard.get_text().unwrap_or_default()
-        }
+        },
     };
 
     if text.trim().is_empty() {

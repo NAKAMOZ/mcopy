@@ -1,6 +1,6 @@
 use super::theme::{
-    ACTION_BUTTON_WIDTH, ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER, DISABLED_TEXT,
-    MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT, SUCCESS_FILL,
+    ACTION_BUTTON_WIDTH, ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER,
+    DISABLED_TEXT, MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT, SUCCESS_FILL,
 };
 use gpui::*;
 
@@ -90,7 +90,10 @@ pub fn counter_display(
         )
 }
 
-pub fn header_row(status: impl IntoElement, counter: impl IntoElement) -> impl IntoElement {
+pub fn header_row(
+    status: impl IntoElement,
+    counter: impl IntoElement,
+) -> impl IntoElement {
     div()
         .w_full()
         .flex()

@@ -60,7 +60,8 @@ const MENU_ENTRIES: &[MenuEntry] = &[
 ];
 
 /// The entry whose version we trust as the authoritative install marker.
-const PRIMARY_MENU_PATH: &str = r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste";
+const PRIMARY_MENU_PATH: &str =
+    r"SOFTWARE\Classes\Directory\Background\shell\mcopy_paste";
 
 pub struct WindowsMenu;
 
@@ -93,7 +94,9 @@ impl ContextMenu for WindowsMenu {
     fn state() -> anyhow::Result<ContextMenuInstallState> {
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
-        if let Ok(key) = hklm.open_subkey_with_flags(PRIMARY_MENU_PATH, KEY_READ) {
+        if let Ok(key) =
+            hklm.open_subkey_with_flags(PRIMARY_MENU_PATH, KEY_READ)
+        {
             return Ok(ContextMenuInstallState::Installed {
                 version: read_version(&key),
             });
@@ -101,7 +104,9 @@ impl ContextMenu for WindowsMenu {
 
         for entry in MENU_ENTRIES {
             if hklm.open_subkey_with_flags(entry.path, KEY_READ).is_ok() {
-                return Ok(ContextMenuInstallState::Installed { version: None });
+                return Ok(ContextMenuInstallState::Installed {
+                    version: None,
+                });
             }
         }
 
@@ -110,7 +115,11 @@ impl ContextMenu for WindowsMenu {
 }
 
 /// Create one menu entry plus its `command` subkey.
-fn install_entry(hklm: &RegKey, exe_path: &str, entry: &MenuEntry) -> anyhow::Result<()> {
+fn install_entry(
+    hklm: &RegKey,
+    exe_path: &str,
+    entry: &MenuEntry,
+) -> anyhow::Result<()> {
     let (key, _) = hklm.create_subkey(entry.path)?;
     key.set_value("", &entry.label)?;
     write_metadata(&key, exe_path)?;
@@ -121,7 +130,8 @@ fn install_entry(hklm: &RegKey, exe_path: &str, entry: &MenuEntry) -> anyhow::Re
         key.set_value("MultiSelectModel", &"Player")?;
     }
 
-    let (cmd_key, _) = hklm.create_subkey(format!("{}\\command", entry.path))?;
+    let (cmd_key, _) =
+        hklm.create_subkey(format!("{}\\command", entry.path))?;
     let command = entry.command_template.replace("{exe}", exe_path);
     cmd_key.set_value("", &command)?;
 
@@ -151,7 +161,11 @@ fn read_version(key: &RegKey) -> Option<String> {
 }
 
 /// Delete a single menu entry if it exists.
-fn delete_menu_entry(hklm: &RegKey, base_path: &str, menu_name: &str) -> anyhow::Result<()> {
+fn delete_menu_entry(
+    hklm: &RegKey,
+    base_path: &str,
+    menu_name: &str,
+) -> anyhow::Result<()> {
     match hklm.open_subkey_with_flags(base_path, KEY_WRITE) {
         Ok(key) => match key.delete_subkey_all(menu_name) {
             Ok(_) => Ok(()),

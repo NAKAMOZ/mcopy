@@ -5,8 +5,9 @@ use mcopy::clipboard;
 use mcopy::platform::{self, ContextMenu, Platform};
 use mcopy::ui;
 use mcopy::{
-    CopyController, CopyItem, ProgressPhase, ProgressUpdate, calculate_concurrency, collect_files,
-    copy_files_with_progress, normalize_path, precreate_directories,
+    CopyController, CopyItem, ProgressPhase, ProgressUpdate,
+    calculate_concurrency, collect_files, copy_files_with_progress,
+    normalize_path, precreate_directories,
 };
 use std::path::PathBuf;
 use std::time::Instant;
@@ -190,22 +191,31 @@ async fn run_legacy(args: Args) -> anyhow::Result<()> {
         let overall_clone = overall.clone();
 
         // Feed progress updates into indicatif.
-        let callback = Box::new(move |update: ProgressUpdate| match update.phase {
-            ProgressPhase::Started => {
-                current_clone.set_message(format!("Copying: {}", update.file_name));
-            }
-            ProgressPhase::Finished => {
-                current_clone.set_message(format!("Completed: {}", update.file_name));
-                overall_clone.set_position(update.processed_files as u64);
-            }
-            ProgressPhase::Failed => {
-                current_clone.set_message(format!("Skipped/Failed: {}", update.file_name));
-                overall_clone.set_position(update.processed_files as u64);
-            }
-        });
+        let callback =
+            Box::new(move |update: ProgressUpdate| match update.phase {
+                ProgressPhase::Started => {
+                    current_clone
+                        .set_message(format!("Copying: {}", update.file_name));
+                },
+                ProgressPhase::Finished => {
+                    current_clone.set_message(format!(
+                        "Completed: {}",
+                        update.file_name
+                    ));
+                    overall_clone.set_position(update.processed_files as u64);
+                },
+                ProgressPhase::Failed => {
+                    current_clone.set_message(format!(
+                        "Skipped/Failed: {}",
+                        update.file_name
+                    ));
+                    overall_clone.set_position(update.processed_files as u64);
+                },
+            });
 
         // Copy files.
-        copy_files_with_progress(files, concurrency, Some(callback), None).await?;
+        copy_files_with_progress(files, concurrency, Some(callback), None)
+            .await?;
 
         overall.finish_with_message("Copy completed!");
         current.finish_and_clear();
