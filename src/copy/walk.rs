@@ -1,3 +1,5 @@
+use crate::calculate_concurrency;
+use futures::{StreamExt, stream};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -19,9 +21,10 @@ pub async fn collect_files(
         return Ok(vec![(src_root.to_path_buf(), dst_path)]);
     }
 
-    // Walk directory contents recursively.
+    // Walk directory contents recursively, reading each tree level with bounded
+    // concurrency so deep/wide trees overlap their (latency-bound) reads instead
+    // of stat-ing one directory at a time.
     let mut result = Vec::new();
-    let mut stack: Vec<(PathBuf, PathBuf)> = Vec::new();
 
     // Preserve the source root name when available.
     // For drive roots such as `D:\`, `file_name()` returns `None`, so we use
@@ -31,32 +34,65 @@ pub async fn collect_files(
         None => dst_root.to_path_buf(),
     };
 
-    stack.push((src_root.to_path_buf(), initial_dst));
+    // Bound the fan-out to keep open file descriptors in check on huge trees.
+    let concurrency = calculate_concurrency(None);
+    let mut current_level: Vec<(PathBuf, PathBuf)> = vec![(src_root.to_path_buf(), initial_dst)];
 
-    while let Some((current_src, current_dst)) = stack.pop() {
-        let mut dir = fs::read_dir(&current_src).await?;
+    while !current_level.is_empty() {
+        // Read every directory at this level concurrently.
+        let level_results: Vec<anyhow::Result<DirContents>> = stream::iter(current_level)
+            .map(|(src, dst)| read_dir_contents(src, dst))
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
 
-        while let Some(entry) = dir.next_entry().await? {
-            let entry_path = entry.path();
-            let file_type = entry.file_type().await?;
-
-            if file_type.is_dir() {
-                let name = entry_path
-                    .file_name()
-                    .ok_or_else(|| anyhow::anyhow!("Could not read the subdirectory name"))?;
-                let dst_sub = current_dst.join(name);
-                stack.push((entry_path, dst_sub));
-            } else if file_type.is_file() {
-                let name = entry_path
-                    .file_name()
-                    .ok_or_else(|| anyhow::anyhow!("Could not read the file name"))?;
-                let dst_file_path = current_dst.join(name);
-                result.push((entry_path, dst_file_path));
-            }
+        let mut next_level = Vec::new();
+        for contents in level_results {
+            let contents = contents?;
+            result.extend(contents.files);
+            next_level.extend(contents.subdirs);
         }
+
+        current_level = next_level;
     }
 
     Ok(result)
+}
+
+/// Files and subdirectories discovered in a single directory.
+struct DirContents {
+    files: Vec<(PathBuf, PathBuf)>,
+    subdirs: Vec<(PathBuf, PathBuf)>,
+}
+
+/// Read one directory, mapping each entry's source path to its destination.
+async fn read_dir_contents(src: PathBuf, dst: PathBuf) -> anyhow::Result<DirContents> {
+    let mut files = Vec::new();
+    let mut subdirs = Vec::new();
+    let mut dir = fs::read_dir(&src).await?;
+
+    while let Some(entry) = dir.next_entry().await? {
+        let entry_path = entry.path();
+        let file_type = entry.file_type().await?;
+
+        if file_type.is_dir() {
+            let dst_sub = dst.join(
+                entry_path
+                    .file_name()
+                    .ok_or_else(|| anyhow::anyhow!("Could not read the subdirectory name"))?,
+            );
+            subdirs.push((entry_path, dst_sub));
+        } else if file_type.is_file() {
+            let dst_file = dst.join(
+                entry_path
+                    .file_name()
+                    .ok_or_else(|| anyhow::anyhow!("Could not read the file name"))?,
+            );
+            files.push((entry_path, dst_file));
+        }
+    }
+
+    Ok(DirContents { files, subdirs })
 }
 
 /// Create destination directories ahead of time.
