@@ -12,7 +12,7 @@ pub struct MacosMenu;
 impl ContextMenu for MacosMenu {
     /// Install macOS Finder Services.
     fn install(exe_path: &Path) -> anyhow::Result<()> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
         // Create the Services directory.
@@ -44,7 +44,7 @@ impl ContextMenu for MacosMenu {
 
     /// Remove macOS Finder Services.
     fn uninstall() -> anyhow::Result<()> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
         let services_dir = PathBuf::from(&home).join(SERVICES_DIR);
 
         // Remove the workflow bundles.
@@ -65,7 +65,7 @@ impl ContextMenu for MacosMenu {
     }
 
     fn state() -> anyhow::Result<ContextMenuInstallState> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
         let version_path = version_file_path(&home);
 
         if let Ok(version) = fs::read_to_string(&version_path) {
@@ -87,6 +87,14 @@ impl ContextMenu for MacosMenu {
 
         Ok(ContextMenuInstallState::NotInstalled)
     }
+}
+
+/// Resolve the user's home directory via `dirs` (more robust than `$HOME` and
+/// consistent with how Windows resolves paths).
+fn home_dir() -> anyhow::Result<String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine the home directory"))
 }
 
 fn write_install_metadata(home: &str) -> anyhow::Result<()> {

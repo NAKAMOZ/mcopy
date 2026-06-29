@@ -294,6 +294,10 @@ pub fn show_progress_window(progress: CopyProgress, controller: CopyController) 
             kind: WindowKind::PopUp,
             is_resizable: false,
             is_minimizable: false,
+            // Transparent background + client-side decorations render differently
+            // across Wayland compositors (some tiling WMs ignore rounding /
+            // transparency). Acceptable; worth testing on GNOME/Wayland, KDE and
+            // a tiling WM.
             window_background: WindowBackgroundAppearance::Transparent,
             window_decorations: Some(WindowDecorations::Client),
             ..Default::default()

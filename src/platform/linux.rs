@@ -22,7 +22,7 @@ pub struct LinuxMenu;
 impl ContextMenu for LinuxMenu {
     /// Install Linux file manager integration (Nautilus, Dolphin, Thunar).
     fn install(exe_path: &Path) -> anyhow::Result<()> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
         let exe_str = exe_path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("The executable path is invalid"))?;
@@ -44,7 +44,7 @@ impl ContextMenu for LinuxMenu {
 
     /// Remove Linux file manager integration.
     fn uninstall() -> anyhow::Result<()> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
 
         // Nautilus.
         let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
@@ -66,7 +66,7 @@ impl ContextMenu for LinuxMenu {
     }
 
     fn state() -> anyhow::Result<ContextMenuInstallState> {
-        let home = std::env::var("HOME")?;
+        let home = home_dir()?;
         let version_path = version_file_path(&home);
 
         if let Ok(version) = fs::read_to_string(&version_path) {
@@ -94,6 +94,14 @@ impl ContextMenu for LinuxMenu {
     }
 }
 
+/// Resolve the user's home directory via `dirs` (handles edge cases more
+/// robustly than reading `$HOME`, and matches how Windows resolves paths).
+fn home_dir() -> anyhow::Result<String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine the home directory"))
+}
+
 fn write_install_metadata(home: &str) -> anyhow::Result<()> {
     let support_dir = PathBuf::from(home).join(SUPPORT_DIR);
     fs::create_dir_all(&support_dir)?;
@@ -110,6 +118,9 @@ fn version_file_path(home: &str) -> PathBuf {
     PathBuf::from(home).join(SUPPORT_DIR).join(VERSION_FILE)
 }
 
+// Note: Nautilus 43+ de-emphasizes `~/.local/share/nautilus/scripts` in favor
+// of `nautilus-python` extensions. Scripts still run but are less discoverable;
+// a proper extension could be added later if discoverability becomes a problem.
 fn install_nautilus_scripts(home: &str, exe_path: &str) -> anyhow::Result<()> {
     let scripts_dir = PathBuf::from(home).join(".local/share/nautilus/scripts");
     fs::create_dir_all(&scripts_dir)?;
