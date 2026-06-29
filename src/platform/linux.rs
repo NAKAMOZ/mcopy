@@ -7,6 +7,16 @@ use std::path::{Path, PathBuf};
 const SUPPORT_DIR: &str = ".local/share/mcopy";
 const VERSION_FILE: &str = "install-version";
 
+/// KDE service-menu directories, relative to `$HOME`.
+///
+/// Plasma 5 read from `kservices5/ServiceMenus`; Plasma 6 moved to
+/// `kio/servicemenus`. Installing to both keeps Dolphin working on either
+/// version (the unused path is harmless).
+const DOLPHIN_SERVICE_DIRS: [&str; 2] = [
+    ".local/share/kservices5/ServiceMenus",
+    ".local/share/kio/servicemenus",
+];
+
 pub struct LinuxMenu;
 
 impl ContextMenu for LinuxMenu {
@@ -41,9 +51,10 @@ impl ContextMenu for LinuxMenu {
         let _ = fs::remove_file(nautilus_dir.join("mcopy-copy"));
         let _ = fs::remove_file(nautilus_dir.join("mcopy-paste"));
 
-        // Dolphin.
-        let dolphin_dir = PathBuf::from(&home).join(".local/share/kservices5/ServiceMenus");
-        let _ = fs::remove_file(dolphin_dir.join("mcopy.desktop"));
+        // Dolphin (Plasma 5 and 6 paths).
+        for dir in DOLPHIN_SERVICE_DIRS {
+            let _ = fs::remove_file(PathBuf::from(&home).join(dir).join("mcopy.desktop"));
+        }
 
         // Thunar uses `uca.xml`, which is more complicated to edit safely.
         println!("✓ Nautilus and Dolphin integration removed!");
@@ -68,11 +79,13 @@ impl ContextMenu for LinuxMenu {
         }
 
         let nautilus_dir = PathBuf::from(&home).join(".local/share/nautilus/scripts");
-        let dolphin_dir = PathBuf::from(&home).join(".local/share/kservices5/ServiceMenus");
+        let dolphin_installed = DOLPHIN_SERVICE_DIRS
+            .iter()
+            .any(|dir| PathBuf::from(&home).join(dir).join("mcopy.desktop").exists());
 
         if nautilus_dir.join("mcopy-copy").exists()
             || nautilus_dir.join("mcopy-paste").exists()
-            || dolphin_dir.join("mcopy.desktop").exists()
+            || dolphin_installed
         {
             return Ok(ContextMenuInstallState::Installed { version: None });
         }
@@ -132,9 +145,6 @@ done
 }
 
 fn install_dolphin_service(home: &str, exe_path: &str) -> anyhow::Result<()> {
-    let services_dir = PathBuf::from(home).join(".local/share/kservices5/ServiceMenus");
-    fs::create_dir_all(&services_dir)?;
-
     let desktop_entry = format!(
         r#"[Desktop Entry]
 Type=Service
@@ -154,9 +164,14 @@ Exec="{}" paste %d
 "#,
         exe_path, exe_path
     );
-    fs::write(services_dir.join("mcopy.desktop"), desktop_entry)?;
 
-    println!("  Dolphin: {}", services_dir.display());
+    // Install to both the Plasma 5 and Plasma 6 service-menu locations.
+    for dir in DOLPHIN_SERVICE_DIRS {
+        let services_dir = PathBuf::from(home).join(dir);
+        fs::create_dir_all(&services_dir)?;
+        fs::write(services_dir.join("mcopy.desktop"), &desktop_entry)?;
+        println!("  Dolphin: {}", services_dir.display());
+    }
     Ok(())
 }
 
