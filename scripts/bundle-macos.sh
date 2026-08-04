@@ -7,6 +7,12 @@
 # bundle identifier) fixes activation and Dock/⌘-Tab behavior. The CLI
 # subcommands still work when invoking the inner binary directly.
 #
+# NOTE: this bundle deliberately does NOT set LSUIElement. Version 0.2 did, which
+# made mcopy an accessory (agent) application with no Dock tile at all — so the
+# copy progress window could never be reached once it lost focus, no matter what
+# window kind it used. AppKit is only initialised on the code paths that open a
+# window, so the short-lived `mcopy copy` invocation still shows nothing.
+#
 # Usage: scripts/bundle-macos.sh [path/to/mcopy-binary]
 # Signing/notarization is intentionally out of scope (TODO for signed releases).
 set -euo pipefail
@@ -43,7 +49,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>
     <string>mcopy</string>
     <key>CFBundleIdentifier</key>
-    <string>com.mcopy.app</string>
+    <string>${APP_ID}</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -54,8 +60,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>logo</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
-    <key>LSUIElement</key>
-    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>${COPYRIGHT}</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

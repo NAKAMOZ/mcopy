@@ -1,9 +1,12 @@
 use crate::platform::{self, ContextMenu, ContextMenuInstallState, Platform};
-use std::path::{Path, PathBuf};
+use crate::{log_error, log_info};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use tokio::sync::Notify;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum InstallOperation {
     Install,
     Uninstall,
@@ -15,28 +18,112 @@ pub(crate) struct InstallRenderState {
     pub active_operation: Option<InstallOperation>,
     pub message: String,
     pub is_error: bool,
+    /// `None` when the executable lives somewhere durable. When set, install is
+    /// blocked and the message explains how to fix it.
+    pub blocked_by: Option<platform::VolatileReason>,
 }
 
 impl InstallRenderState {
-    /// Build the initial state by probing the current install status.
-    pub(crate) fn probe() -> Self {
-        Platform::state()
-            .map(|install_state| InstallRenderState {
-                install_state,
-                active_operation: None,
-                message: String::new(),
-                is_error: false,
-            })
-            .unwrap_or_else(|error| InstallRenderState {
-                install_state: ContextMenuInstallState::NotInstalled,
-                active_operation: None,
-                message: format!("{}", error),
-                is_error: true,
-            })
+    /// Build the initial state by probing the install status and the location
+    /// the executable is running from.
+    pub(crate) fn probe(exe_path: &std::path::Path) -> Self {
+        let location = platform::location::classify(exe_path);
+        let blocked_by = location.blocking_reason();
+
+        let (install_state, mut message, mut is_error) = match Platform::state()
+        {
+            Ok(state) => (state, String::new(), false),
+            Err(error) => {
+                log_error!("could not read the install state: {error}");
+                (
+                    ContextMenuInstallState::NotInstalled,
+                    error.to_string(),
+                    true,
+                )
+            },
+        };
+
+        // The location problem is the more actionable of the two, so it wins
+        // the single line of message space.
+        if let Some(reason) = blocked_by {
+            log_info!(
+                "running from a volatile location: {}",
+                location.exe().display()
+            );
+            message = reason.remedy().to_string();
+            is_error = true;
+        }
+
+        Self {
+            install_state,
+            active_operation: None,
+            message,
+            is_error,
+            blocked_by,
+        }
     }
 
     pub(crate) fn is_busy(&self) -> bool {
         self.active_operation.is_some()
+    }
+
+    pub(crate) fn is_blocked(&self) -> bool {
+        self.blocked_by.is_some()
+    }
+}
+
+/// Handle to the worker running an install or uninstall.
+///
+/// Version 0.2 detached this thread, so nothing could observe or wait for it —
+/// and because the elevation helper it ran could block indefinitely, the process
+/// could outlive its window. Keeping the handle lets shutdown join it.
+#[derive(Default)]
+pub(crate) struct OperationWorker {
+    handle: Mutex<Option<JoinHandle<()>>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl OperationWorker {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Ask the worker to stop at its next checkpoint and wait briefly for it.
+    ///
+    /// Registry and file writes are short and must not be torn in half, so the
+    /// worker is interrupted between steps rather than aborted. The join is
+    /// bounded: shutdown never waits on work that is not making progress.
+    pub(crate) fn shutdown(&self) {
+        self.cancelled.store(true, Ordering::Release);
+
+        let handle = self.handle.lock().unwrap().take();
+        let Some(handle) = handle else {
+            return;
+        };
+
+        // A completed thread joins instantly; a stuck one is abandoned rather
+        // than hanging the exit, and the process teardown reclaims it.
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_millis(2_000);
+        while !handle.is_finished() {
+            if std::time::Instant::now() >= deadline {
+                log_error!("install worker did not finish before shutdown");
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        if handle.join().is_err() {
+            log_error!("install worker panicked");
+        }
+    }
+
+    fn store(&self, handle: JoinHandle<()>) {
+        *self.handle.lock().unwrap() = Some(handle);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
     }
 }
 
@@ -44,6 +131,7 @@ impl InstallRenderState {
 /// starting anything) when the operation is not applicable right now.
 pub(crate) fn start_operation(
     state: Arc<Mutex<InstallRenderState>>,
+    worker: Arc<OperationWorker>,
     notify: Arc<Notify>,
     exe_path: PathBuf,
     operation: InstallOperation,
@@ -54,15 +142,11 @@ pub(crate) fn start_operation(
             return false;
         }
 
-        if operation == InstallOperation::Install
-            && state.install_state.is_current_version()
-        {
-            return false;
-        }
-
-        if operation == InstallOperation::Uninstall
-            && !state.install_state.is_current_version()
-        {
+        if operation == InstallOperation::Install {
+            if state.is_blocked() || state.install_state.is_current_version() {
+                return false;
+            }
+        } else if !state.install_state.is_current_version() {
             return false;
         }
 
@@ -71,11 +155,19 @@ pub(crate) fn start_operation(
         state.is_error = false;
     }
 
-    std::thread::spawn(move || {
-        let result = match operation {
-            InstallOperation::Install => perform_install(&exe_path),
-            InstallOperation::Uninstall => perform_uninstall(&exe_path),
+    let worker_for_thread = worker.clone();
+    let handle = std::thread::spawn(move || {
+        let result = if worker_for_thread.is_cancelled() {
+            Err(anyhow::anyhow!("cancelled"))
+        } else {
+            match operation {
+                InstallOperation::Install => {
+                    platform::install_or_update_context_menu(&exe_path)
+                },
+                InstallOperation::Uninstall => Platform::uninstall(),
+            }
         };
+
         let refreshed_state = Platform::state();
         let mut state = state.lock().unwrap();
 
@@ -86,11 +178,13 @@ pub(crate) fn start_operation(
 
         match result {
             Ok(()) => {
+                log_info!("{operation:?} completed");
                 state.message.clear();
                 state.is_error = false;
             },
             Err(error) => {
-                state.message = format!("{}", error);
+                log_error!("{operation:?} failed: {error}");
+                state.message = error.to_string();
                 state.is_error = true;
             },
         }
@@ -100,83 +194,60 @@ pub(crate) fn start_operation(
         notify.notify_waiters();
     });
 
+    worker.store(handle);
     true
 }
 
-fn perform_install(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "install");
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_without_a_running_worker_returns_immediately() {
+        let worker = OperationWorker::new();
+        worker.shutdown();
+        assert!(worker.is_cancelled());
     }
 
-    platform::install_or_update_context_menu(exe_path)
-}
-
-fn perform_uninstall(exe_path: &Path) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        if !is_elevated::is_elevated() {
-            return run_elevated_command(exe_path, "uninstall");
-        }
+    #[test]
+    fn shutdown_joins_a_finished_worker() {
+        let worker = OperationWorker::new();
+        worker.store(std::thread::spawn(|| {}));
+        worker.shutdown();
+        assert!(worker.handle.lock().unwrap().is_none());
     }
 
-    let _ = exe_path;
-    Platform::uninstall()
-}
+    #[test]
+    fn shutdown_is_idempotent() {
+        let worker = OperationWorker::new();
+        worker.store(std::thread::spawn(|| {}));
+        worker.shutdown();
+        worker.shutdown();
+    }
 
-#[cfg(target_os = "windows")]
-fn run_elevated_command(exe_path: &Path, command: &str) -> anyhow::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, INFINITE, WaitForSingleObject,
-    };
-    use windows_sys::Win32::UI::Shell::{
-        SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+    /// A worker that never finishes must not stop the process from exiting.
+    #[test]
+    fn shutdown_gives_up_on_a_stuck_worker() {
+        let worker = OperationWorker::new();
+        let release = Arc::new(AtomicBool::new(false));
+        let release_for_thread = release.clone();
 
-    let verb = wide_null("runas");
-    let file: Vec<u16> =
-        exe_path.as_os_str().encode_wide().chain([0]).collect();
-    let parameters = wide_null(command);
+        worker.store(std::thread::spawn(move || {
+            while !release_for_thread.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }));
 
-    let mut execute_info = SHELLEXECUTEINFOW {
-        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-        fMask: SEE_MASK_NOCLOSEPROCESS,
-        lpVerb: verb.as_ptr(),
-        lpFile: file.as_ptr(),
-        lpParameters: parameters.as_ptr(),
-        nShow: SW_HIDE,
-        ..Default::default()
-    };
+        let started = std::time::Instant::now();
+        worker.shutdown();
+        let elapsed = started.elapsed();
 
-    let started = unsafe { ShellExecuteExW(&mut execute_info) };
-    if started == 0 {
-        let error = unsafe { GetLastError() };
-        anyhow::bail!(
-            "could not start elevated command: Windows error {}",
-            error
+        // Let the thread finish so the test does not leak it.
+        release.store(true, Ordering::Release);
+
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "shutdown blocked for {elapsed:?}"
         );
     }
-
-    let mut exit_code = 0;
-    unsafe {
-        WaitForSingleObject(execute_info.hProcess, INFINITE);
-        GetExitCodeProcess(execute_info.hProcess, &mut exit_code);
-        CloseHandle(execute_info.hProcess);
-    }
-
-    if exit_code == 0 {
-        Ok(())
-    } else {
-        anyhow::bail!("elevated command exited with code {}", exit_code)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn wide_null(value: &str) -> Vec<u16> {
-    value.encode_utf16().chain([0]).collect()
 }

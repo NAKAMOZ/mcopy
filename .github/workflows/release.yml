@@ -1,9 +1,15 @@
 name: release
 
-# Build release binaries on tested native GitHub-hosted runners and attach the
-# packaged outputs to a GitHub Release. Windows embeds its icon/manifest via
-# build.rs; macOS is packaged into a proper .app bundle. Code signing /
-# notarization is out of scope for now.
+# Build release artifacts on native GitHub-hosted runners and attach the
+# packaged installers to a GitHub Release.
+#
+# Each platform ships a real installer, so the downloaded file is no longer
+# required once installation finishes:
+#   Windows  mcopy-setup-<version>-x86_64.exe   (Inno Setup, per-user, no UAC)
+#   macOS    mcopy-<version>.pkg / .dmg         (pkgbuild / hdiutil)
+#   Linux    mcopy_<version>_amd64.deb + .tar.gz (dpkg-deb)
+#
+# Code signing / notarization is out of scope; see the release notes.
 
 on:
   push:
@@ -11,12 +17,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create or update, for example v0.2.0"
+        description: "Release tag to create or update, for example v0.3.0"
         required: true
         type: string
 
 permissions:
   contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   release-context:
@@ -77,8 +86,49 @@ jobs:
             echo "version=${tag#v}"
           } >> "$GITHUB_OUTPUT"
 
-  build:
+  # Gate the release on the test suite passing everywhere. A broken build must
+  # never reach the Releases page.
+  test:
     needs: release-context
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-context.outputs.checkout_ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # gpui links against X11/Wayland, xkbcommon and fontconfig, and renders
+          # through Vulkan. These are build-time headers; the runtime packages
+          # are declared by the .deb.
+          sudo apt-get install --no-install-recommends -y \
+            libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libfreetype6-dev \
+            libvulkan-dev libssl-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+  build:
+    needs: [release-context, test]
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +137,8 @@ jobs:
             name: windows
           - os: macos-latest
             name: macos
+          - os: ubuntu-latest
+            name: linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -108,30 +160,48 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install Linux build dependencies
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libfreetype6-dev \
+            libvulkan-dev libssl-dev pkg-config
+
       - name: Build (release)
         run: cargo build --release --locked
 
-      - name: Package macOS .app
-        if: matrix.name == 'macos'
-        run: ./scripts/bundle-macos.sh
+      - name: Install Inno Setup
+        if: matrix.name == 'windows'
+        run: choco install innosetup --no-progress -y
 
-      - name: Package Windows binary
+      - name: Package Windows installer
         if: matrix.name == 'windows'
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item target\release\mcopy.exe dist\mcopy-windows-x86_64.exe
-          Compress-Archive -Path dist\mcopy-windows-x86_64.exe -DestinationPath dist\mcopy-windows-x86_64.zip -Force
+        run: ./scripts/package-windows.ps1 -SkipBuild
 
-      - name: Package macOS app
+      - name: Package macOS pkg and dmg
         if: matrix.name == 'macos'
-        run: ditto -c -k --sequesterRsrc --keepParent dist/mcopy.app dist/mcopy-macos.zip
+        run: |
+          ./scripts/bundle-macos.sh
+          ./scripts/package-macos.sh
+
+      - name: Package Linux deb and tarball
+        if: matrix.name == 'linux'
+        run: ./scripts/package-linux.sh
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v7
         with:
           name: mcopy-${{ matrix.name }}
-          path: dist/*.zip
+          path: |
+            dist/*.exe
+            dist/*.pkg
+            dist/*.dmg
+            dist/*.deb
+            dist/*.tar.gz
+          if-no-files-found: error
 
   publish:
     needs: [release-context, build]
@@ -187,6 +257,10 @@ jobs:
           tag_name: ${{ needs.release-context.outputs.tag }}
           target_commitish: ${{ needs.release-context.outputs.target_commitish }}
           files: |
-            dist/*.zip
+            dist/*.exe
+            dist/*.pkg
+            dist/*.dmg
+            dist/*.deb
+            dist/*.tar.gz
           body_path: release-notes.md
           make_latest: true

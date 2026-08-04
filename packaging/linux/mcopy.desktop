@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=mcopy
+GenericName=File Copy Utility
+Comment=Fast and reliable file copy utility
+Exec=mcopy
+Icon=mcopy
+Terminal=false
+Categories=Utility;FileTools;
+Keywords=copy;paste;files;folders;
+StartupNotify=true
+# Must match the app_id the windows declare, so Wayland and X11 taskbars pair
+# the running window with this entry and show the right name and icon.
+StartupWMClass=com.mcopy.app

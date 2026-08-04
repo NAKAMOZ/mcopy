@@ -1,10 +1,14 @@
 mod controller;
+mod error;
 mod progress;
 mod walk;
 
 pub use controller::CopyController;
+pub use error::CopyErrorKind;
 pub use progress::{ProgressCallback, ProgressPhase, ProgressUpdate};
 pub use walk::{CopyItem, CopyItemKind, collect_files, precreate_directories};
+
+use crate::log_warn;
 
 use futures::{StreamExt, stream};
 use std::sync::{
@@ -55,6 +59,7 @@ pub async fn copy_files_with_progress(
                     processed_files: items_processed.load(Ordering::Relaxed),
                     file_name: file_name.clone(),
                     file_bytes: 0,
+                    error: None,
                 });
             }
 
@@ -69,13 +74,20 @@ pub async fn copy_files_with_progress(
                             processed_files: processed,
                             file_name,
                             file_bytes: bytes,
+                            error: None,
                         });
                     }
                 },
                 Err(e) => {
-                    eprintln!(
-                        "ERROR: {:?} -> {:?} | {}",
-                        item.src, item.dst, e
+                    // Classify before logging so the UI can name the cause; the
+                    // log keeps the full paths that the banner has no room for.
+                    let kind = CopyErrorKind::from_anyhow(&e);
+                    log_warn!(
+                        "copy failed ({:?}): {} -> {} | {}",
+                        kind,
+                        item.src.display(),
+                        item.dst.display(),
+                        e
                     );
 
                     let processed =
@@ -86,6 +98,7 @@ pub async fn copy_files_with_progress(
                             processed_files: processed,
                             file_name,
                             file_bytes: 0,
+                            error: Some(kind),
                         });
                     }
                 },

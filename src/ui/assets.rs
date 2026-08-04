@@ -20,6 +20,9 @@ const INTER_FONTS: &[&[u8]] = &[
 pub(crate) fn register_fonts(cx: &App) {
     let fonts = INTER_FONTS.iter().map(|b| Cow::Borrowed(*b)).collect();
     if let Err(err) = cx.text_system().add_fonts(fonts) {
-        eprintln!("warning: failed to load bundled Inter font: {err}");
+        // stderr is usually unreachable here (no console under
+        // `windows_subsystem = "windows"`, discarded by the shell
+        // integrations), so the log is what actually preserves this.
+        crate::log_warn!("failed to load the bundled Inter font: {err}");
     }
 }

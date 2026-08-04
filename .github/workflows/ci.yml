@@ -1,0 +1,112 @@
+name: ci
+
+# Format, lint and test on every supported platform. The release workflow runs
+# the same checks before it packages anything; this job exists so regressions
+# are caught on the branch rather than at tag time.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # gpui links against X11/Wayland, xkbcommon and fontconfig, and
+          # renders through Vulkan.
+          sudo apt-get install --no-install-recommends -y \
+            libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libfreetype6-dev \
+            libvulkan-dev libssl-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      # The GUI cannot be exercised on a headless runner, but the CLI paths can:
+      # this catches a binary that fails to start at all.
+      - name: Smoke-test the CLI
+        shell: bash
+        run: |
+          cargo run --locked --release -- --version
+          cargo run --locked --release -- status
+
+  packaging:
+    # Verifies the packaging scripts still run, without publishing anything.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libfreetype6-dev \
+            libvulkan-dev libssl-dev pkg-config
+
+      - name: Build (release)
+        run: cargo build --release --locked
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        run: |
+          ./scripts/bundle-macos.sh
+          ./scripts/package-macos.sh
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        run: ./scripts/package-linux.sh
+
+      # A .deb that does not install cleanly is not a working artifact.
+      - name: Verify the Linux package installs and uninstalls
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          deb="$(ls dist/mcopy_*_amd64.deb)"
+          sudo apt-get install -y "./$deb"
+          command -v mcopy
+          # Launching from PATH after installing is the behaviour that broke in
+          # 0.2, where the menu entries pointed at the download directory.
+          mcopy --version
+          mcopy status
+          sudo apt-get remove -y mcopy
+          ! command -v mcopy

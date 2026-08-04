@@ -4,19 +4,29 @@ path = "src/main.rs"
 
 [package]
 name = "mcopy"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
+rust-version = "1.85"
+authors = ["Nevzat ÇELİKKANAT"]
+description = "Fast, queue-aware file and folder copying built around the native right-click workflow"
+readme = "README.md"
+repository = "https://github.com/NAKAMOZ/mcopy"
+homepage = "https://github.com/NAKAMOZ/mcopy"
+license = "MIT"
+keywords = ["copy", "file-manager", "clipboard", "context-menu", "gui"]
+categories = ["command-line-utilities", "filesystem"]
+exclude = ["/dist", "/packaging", "/scripts", "/docs", "/.github"]
 
 [dependencies]
 # Core dependencies (cross-platform)
-clap = { version = "4.5.53", features = ["derive"] }
-futures = "0.3.31"
-indicatif = "0.17"
-num_cpus = "1.16"
-tokio = { version = "1", features = ["full"] }
-anyhow = "1.0"
-arboard = "3.6"  # Cross-platform clipboard
-dirs = "5"       # Per-user dir resolution (home, runtime, local data)
+clap = { version = "4.6.5", features = ["derive"] }
+futures = "0.3.33"
+indicatif = "0.18.6"
+num_cpus = "1.17.0"
+tokio = { version = "1.53.1", features = ["full"] }
+anyhow = "1.0.104"
+arboard = "3.6.1"  # Cross-platform clipboard
+dirs = "6.0.0"       # Per-user dir resolution (home, runtime, local data)
 
 # GPUI UI
 gpui = "0.2.2"
@@ -36,3 +46,7 @@ windows-sys = { version = "0.61", features = [
 # Windows build dependencies
 [target.'cfg(windows)'.build-dependencies]
 embed-resource = "2.4"
+
+# Test-only. Nothing here ships in the binary.
+[dev-dependencies]
+tempfile = "3.27.0"

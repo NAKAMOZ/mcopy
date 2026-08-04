@@ -1,5 +1,19 @@
+//! Finder Services integration.
+//!
+//! # Paste-verb visibility
+//!
+//! Unlike Explorer and the Linux file managers, macOS offers no runtime switch
+//! for a Service's visibility: `NSRequiredContext` is evaluated against the
+//! selection, not against application state, and the only way to remove an
+//! entry is to rewrite the workflow bundle and re-run `pbs -update` — which
+//! takes seconds and is unreliable. The Paste service therefore stays listed on
+//! macOS, and `mcopy paste` explains that there is nothing to paste instead of
+//! exiting silently as 0.2 did.
+
 use super::{ContextMenu, ContextMenuInstallState};
+use crate::log_info;
 use crate::platform::state::CURRENT_VERSION;
+use crate::util::shell::{escape_xml, quote_posix};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -49,11 +63,7 @@ impl ContextMenu for MacosMenu {
             .arg("-update")
             .status();
 
-        println!("✓ Finder Services installed successfully!");
-        println!("  Location: {}", services_dir.display());
-        println!(
-            "  Note: Enable them in System Preferences > Keyboard > Shortcuts > Services"
-        );
+        log_info!("installed Finder Services in {}", services_dir.display());
         Ok(())
     }
 
@@ -73,7 +83,7 @@ impl ContextMenu for MacosMenu {
 
         remove_install_metadata(&home)?;
 
-        println!("✓ Finder Services removed successfully!");
+        log_info!("removed Finder Services");
         Ok(())
     }
 
@@ -173,7 +183,8 @@ fn create_automator_workflow(
     fs::create_dir_all(&resources_dir)?;
 
     let escaped_name = xml_escape(name);
-    let bundle_identifier = format!("com.mcopy.service.{}", action);
+    // Each Service bundle needs its own identifier, scoped under the app's.
+    let bundle_identifier = format!("{}.service.{}", crate::APP_ID, action);
 
     // Info.plist
     let info_plist = format!(
@@ -360,24 +371,73 @@ fn create_automator_workflow(
 }
 
 fn workflow_command(exe_path: &str, action: &str) -> anyhow::Result<String> {
-    let exe = shell_quote(exe_path);
+    let exe = quote_posix(exe_path);
 
     match action {
-        "copy" => Ok(format!("{exe} copy \"$@\"")),
+        // `--append` matches the other platforms: Finder passes the whole
+        // selection at once, and appending keeps a multi-item selection in one
+        // copy session.
+        "copy" => Ok(format!("{exe} copy --append \"$@\"")),
         "paste" => Ok(format!("for f in \"$@\"; do {exe} paste \"$f\"; done")),
         _ => anyhow::bail!("Unsupported macOS workflow action: {action}"),
     }
 }
 
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn xml_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+    #[test]
+    fn the_copy_command_appends_to_the_session() {
+        let command = workflow_command(
+            "/Applications/mcopy.app/Contents/MacOS/mcopy",
+            "copy",
+        )
+        .expect("copy is a supported action");
+        assert!(command.contains("copy --append"));
+    }
+
+    #[test]
+    fn workflow_commands_quote_a_hostile_path() {
+        let command =
+            workflow_command("/Apps/My mcopy'; rm -rf ~; echo '", "copy")
+                .expect("copy is a supported action");
+        // The injected command must survive as inert data inside one word.
+        assert!(
+            command.starts_with(r"'/Apps/My mcopy'\''; rm -rf ~; echo '\'''")
+        );
+    }
+
+    #[test]
+    fn unknown_actions_are_rejected() {
+        assert!(workflow_command("/bin/mcopy", "delete").is_err());
+    }
+
+    #[test]
+    fn service_names_are_xml_escaped_for_the_plist() {
+        assert_eq!(escape_xml("Copy & paste"), "Copy &amp; paste");
+    }
+
+    /// Service identifiers must sit under the application's, so macOS
+    /// attributes the Services to mcopy rather than to an unknown vendor.
+    #[test]
+    fn service_identifiers_are_scoped_under_the_app_id() {
+        for action in ["copy", "paste"] {
+            let identifier = format!("{}.service.{action}", crate::APP_ID);
+            assert!(identifier.starts_with("io.github.nakamoz.mcopy."));
+        }
+    }
+
+    #[test]
+    fn uninstall_covers_renamed_services_from_earlier_versions() {
+        let names: Vec<_> = current_and_legacy_service_names().collect();
+        assert!(names.contains(&COPY_SERVICE_NAME));
+        assert!(names.contains(&PASTE_SERVICE_NAME));
+        for legacy in LEGACY_SERVICE_NAMES {
+            assert!(
+                names.contains(legacy),
+                "{legacy} would be orphaned by uninstall"
+            );
+        }
+    }
 }

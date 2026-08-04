@@ -5,10 +5,10 @@ use state::CopyProgressSnapshot;
 
 use crate::CopyController;
 use crate::ui::assets::register_fonts;
-use crate::ui::theme::{
-    ACTIVE_FILL, ButtonTone, MUTED_TEXT, PAUSED_FILL, SOFT_TEXT, SUCCESS_FILL,
-    TITLE_TEXT, WARNING_FILL, WINDOW_HEIGHT, WINDOW_WIDTH,
+use crate::ui::shutdown::{
+    self, ShutdownRequest, quit_when_last_window_closes,
 };
+use crate::ui::theme::{ButtonTone, Palette, WINDOW_HEIGHT, WINDOW_WIDTH};
 use crate::ui::widgets::{
     action_button, brand_mark, controls_row, counter_display, drag_region,
     file_name_row, header_row, message_banner, progress_bar, status_text,
@@ -20,8 +20,11 @@ use std::time::Duration;
 pub struct ProgressWindow {
     progress: CopyProgress,
     controller: CopyController,
+    shutdown: ShutdownRequest,
     refresh_loop_started: bool,
     close_guard_registered: bool,
+    appearance_observer: Option<Subscription>,
+    activated: bool,
 }
 
 impl ProgressWindow {
@@ -29,8 +32,11 @@ impl ProgressWindow {
         Self {
             progress,
             controller,
+            shutdown: ShutdownRequest::new(),
             refresh_loop_started: false,
             close_guard_registered: false,
+            appearance_observer: None,
+            activated: false,
         }
     }
 
@@ -59,7 +65,7 @@ impl ProgressWindow {
                     let should_close = snapshot.should_auto_close;
                     let updated = cx.update(|window, _| {
                         if should_close {
-                            window.remove_window();
+                            shutdown::close(window);
                         } else {
                             window.refresh();
                         }
@@ -86,6 +92,29 @@ impl ProgressWindow {
             .detach();
     }
 
+    /// Repaint when the user switches the OS between light and dark while a
+    /// copy is running.
+    fn ensure_appearance_observer(
+        &mut self,
+        window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        if self.appearance_observer.is_some() {
+            return;
+        }
+
+        self.appearance_observer = Some(
+            window.observe_window_appearance(|window, _| window.refresh()),
+        );
+    }
+
+    /// Handle every close affordance through one path.
+    ///
+    /// A close request while the queue is live means "stop this copy", so it
+    /// cancels the controller and lets the window stay up just long enough to
+    /// show the Cancelled state before the auto-close timer removes it. That is
+    /// visible feedback, unlike 0.2's silent veto. A second close request while
+    /// cancellation is winding down closes immediately.
     fn ensure_close_guard(
         &mut self,
         window: &mut Window,
@@ -99,12 +128,19 @@ impl ProgressWindow {
 
         let progress = self.progress.clone();
         let controller = self.controller.clone();
+        let shutdown = self.shutdown.clone();
         window.on_window_should_close(cx, move |_, _| {
             if progress.snapshot().is_terminal() {
-                true
-            } else {
+                return true;
+            }
+
+            // `begin` returns true only for the first request; a repeat click
+            // means the user wants out now.
+            if shutdown.begin() {
                 controller.cancel();
                 false
+            } else {
+                true
             }
         });
     }
@@ -118,14 +154,17 @@ impl Render for ProgressWindow {
     ) -> impl IntoElement {
         self.ensure_refresh_loop(window, cx);
         self.ensure_close_guard(window, cx);
+        self.ensure_appearance_observer(window, cx);
 
+        let palette = Palette::for_appearance(window.appearance());
         let snapshot = self.progress.snapshot();
         let pause_disabled = snapshot.is_terminal()
             || self.controller.is_cancelled()
             || (snapshot.processed_files() == 0 && snapshot.active_files == 0);
         let cancel_disabled =
             snapshot.is_terminal() || self.controller.is_cancelled();
-        let visual = resolve_visual_state(&snapshot, &self.controller);
+        let visual =
+            resolve_visual_state(&snapshot, &self.controller, &palette);
         let file_display = if snapshot.current_file.is_empty() {
             visual.file_placeholder.to_string()
         } else {
@@ -133,8 +172,16 @@ impl Render for ProgressWindow {
         };
 
         window.set_window_title(&snapshot.window_title(&self.controller));
+
+        // Bring the window forward once when the job starts, then never steal
+        // focus again — the user may deliberately have sent it to the back.
+        if !self.activated {
+            self.activated = true;
+            window.activate_window();
+        }
+
         if snapshot.should_auto_close {
-            window.remove_window();
+            shutdown::close(window);
         }
 
         let pause_controller = self.controller.clone();
@@ -143,6 +190,7 @@ impl Render for ProgressWindow {
             visual.primary_label,
             visual.primary_tone,
             pause_disabled,
+            &palette,
             move |_, window, _| {
                 if pause_controller.is_paused() {
                     pause_controller.resume();
@@ -161,22 +209,17 @@ impl Render for ProgressWindow {
             "Cancel",
             ButtonTone::Outline,
             cancel_disabled,
+            &palette,
             move |_, window, _| {
                 cancel_controller.cancel();
                 window.refresh();
             },
         );
 
-        let message = if snapshot.failed_files > 0 {
-            format!(
-                "{} items failed while the queue continued.",
-                snapshot.failed_files
-            )
-        } else {
-            String::new()
-        };
+        let failure = snapshot.failure_summary();
+        let failure_is_error = snapshot.failure_is_actionable();
 
-        surface_card()
+        surface_card(&palette)
             .w(px(WINDOW_WIDTH))
             .h(px(WINDOW_HEIGHT))
             .font_family("Inter")
@@ -200,7 +243,7 @@ impl Render for ProgressWindow {
                                     .flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(brand_mark())
+                                    .child(brand_mark(&palette))
                                     .child(status_text(
                                         visual.status_label.to_string(),
                                         visual.status_color,
@@ -215,10 +258,15 @@ impl Render for ProgressWindow {
                             .child(progress_bar(
                                 snapshot.percent(),
                                 visual.progress_fill,
+                                &palette,
                             ))
-                            .child(file_name_row(file_display)),
+                            .child(file_name_row(file_display, &palette)),
                     ))
-                    .child(message_banner(message))
+                    .child(message_banner(
+                        failure.unwrap_or_default(),
+                        failure_is_error,
+                        &palette,
+                    ))
                     .child(controls_row(cancel_button, primary_button)),
             )
     }
@@ -238,15 +286,16 @@ struct VisualState {
 fn resolve_visual_state(
     snapshot: &CopyProgressSnapshot,
     controller: &CopyController,
+    palette: &Palette,
 ) -> VisualState {
     if snapshot.is_terminal() {
         if controller.is_cancelled() {
             VisualState {
                 status_label: "Cancelled",
-                status_color: MUTED_TEXT,
-                counter_primary_color: MUTED_TEXT,
-                counter_secondary_color: SOFT_TEXT,
-                progress_fill: WARNING_FILL,
+                status_color: palette.muted_text,
+                counter_primary_color: palette.muted_text,
+                counter_secondary_color: palette.soft_text,
+                progress_fill: palette.warning_fill,
                 primary_label: "Stopped",
                 primary_tone: ButtonTone::Primary,
                 file_placeholder: "Copy stopped before the next item.",
@@ -254,10 +303,10 @@ fn resolve_visual_state(
         } else {
             VisualState {
                 status_label: "Completed",
-                status_color: TITLE_TEXT,
-                counter_primary_color: TITLE_TEXT,
-                counter_secondary_color: MUTED_TEXT,
-                progress_fill: SUCCESS_FILL,
+                status_color: palette.title_text,
+                counter_primary_color: palette.title_text,
+                counter_secondary_color: palette.muted_text,
+                progress_fill: palette.success_fill,
                 primary_label: "Done",
                 primary_tone: ButtonTone::Primary,
                 file_placeholder: "All items were copied.",
@@ -266,10 +315,10 @@ fn resolve_visual_state(
     } else if controller.is_cancelled() {
         VisualState {
             status_label: "Cancelling",
-            status_color: MUTED_TEXT,
-            counter_primary_color: MUTED_TEXT,
-            counter_secondary_color: SOFT_TEXT,
-            progress_fill: WARNING_FILL,
+            status_color: palette.muted_text,
+            counter_primary_color: palette.muted_text,
+            counter_secondary_color: palette.soft_text,
+            progress_fill: palette.warning_fill,
             primary_label: "Pause",
             primary_tone: ButtonTone::Primary,
             file_placeholder: "Finishing active copies before exit.",
@@ -277,10 +326,10 @@ fn resolve_visual_state(
     } else if controller.is_paused() {
         VisualState {
             status_label: "Paused",
-            status_color: MUTED_TEXT,
-            counter_primary_color: MUTED_TEXT,
-            counter_secondary_color: SOFT_TEXT,
-            progress_fill: PAUSED_FILL,
+            status_color: palette.muted_text,
+            counter_primary_color: palette.muted_text,
+            counter_secondary_color: palette.soft_text,
+            progress_fill: palette.paused_fill,
             primary_label: "Resume",
             primary_tone: ButtonTone::Success,
             file_placeholder: "Waiting to resume the queue.",
@@ -288,14 +337,46 @@ fn resolve_visual_state(
     } else {
         VisualState {
             status_label: "Copying Items",
-            status_color: TITLE_TEXT,
-            counter_primary_color: TITLE_TEXT,
-            counter_secondary_color: MUTED_TEXT,
-            progress_fill: ACTIVE_FILL,
+            status_color: palette.title_text,
+            counter_primary_color: palette.title_text,
+            counter_secondary_color: palette.muted_text,
+            progress_fill: palette.active_fill,
             primary_label: "Pause",
             primary_tone: ButtonTone::Primary,
             file_placeholder: "Preparing the copy queue.",
         }
+    }
+}
+
+/// Window options for the copy progress window.
+///
+/// Extracted from the open call so the taskbar/Dock-visibility contract can be
+/// asserted in a unit test without a display server.
+///
+/// `WindowKind::Normal` is load-bearing. gpui maps `PopUp` to `WS_EX_TOOLWINDOW`
+/// on Windows (no taskbar button, no minimize box), to a non-activating
+/// `NSPanel` at pop-up level on macOS (no Dock tile, no Cmd-Tab entry), and to
+/// `_NET_WM_WINDOW_TYPE_NOTIFICATION` on X11 (taskbars skip it by spec). A long
+/// copy therefore had no way back once it lost focus.
+pub(crate) fn progress_window_options(bounds: Bounds<Pixels>) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: Some(TitlebarOptions {
+            title: Some("mcopy".into()),
+            appears_transparent: true,
+            ..Default::default()
+        }),
+        focus: true,
+        show: true,
+        kind: WindowKind::Normal,
+        is_resizable: false,
+        is_minimizable: true,
+        // Lets Wayland and X11 match the window to the installed
+        // `mcopy.desktop` entry, so the switcher shows the real name and icon.
+        app_id: Some(crate::APP_ID.to_string()),
+        window_background: WindowBackgroundAppearance::Transparent,
+        window_decorations: Some(WindowDecorations::Client),
+        ..Default::default()
     }
 }
 
@@ -305,44 +386,82 @@ pub fn show_progress_window(
 ) {
     Application::new().run(move |cx| {
         register_fonts(cx);
-        cx.on_window_closed(|cx| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
+        quit_when_last_window_closes(cx);
 
         let bounds = Bounds::centered(
             None,
             size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)),
             cx,
         );
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: None,
-            focus: true,
-            show: true,
-            kind: WindowKind::PopUp,
-            is_resizable: false,
-            is_minimizable: false,
-            // Transparent background + client-side decorations render differently
-            // across Wayland compositors (some tiling WMs ignore rounding /
-            // transparency). Acceptable; worth testing on GNOME/Wayland, KDE and
-            // a tiling WM.
-            window_background: WindowBackgroundAppearance::Transparent,
-            window_decorations: Some(WindowDecorations::Client),
-            ..Default::default()
-        };
 
-        cx.open_window(options, move |_, cx| {
+        let opened = cx.open_window(progress_window_options(bounds), {
             let progress = progress.clone();
             let controller = controller.clone();
-            cx.new(move |_| {
-                ProgressWindow::new(progress.clone(), controller.clone())
-            })
-        })
-        .unwrap();
+            move |_, cx| {
+                cx.new(move |_| {
+                    ProgressWindow::new(progress.clone(), controller.clone())
+                })
+            }
+        });
+
+        if let Err(error) = opened {
+            // Without a window there is nothing to drive the copy to a visible
+            // conclusion, so cancel rather than copying invisibly.
+            crate::log_error!("could not open the progress window: {error}");
+            controller.cancel();
+            cx.quit();
+            return;
+        }
 
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::theme::AUTO_CLOSE_DELAY;
+    // `use gpui::*` above pulls in gpui's own `test` attribute macro, which
+    // would shadow the built-in one and expand recursively.
+    use core::prelude::v1::test;
+
+    fn options() -> WindowOptions {
+        progress_window_options(Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)),
+        })
+    }
+
+    /// Regression guard for issue 2: a copy that outlives the user's attention
+    /// must remain reachable from the taskbar, Dock, or window switcher.
+    #[test]
+    fn progress_window_is_a_normal_window() {
+        assert_eq!(options().kind, WindowKind::Normal);
+    }
+
+    #[test]
+    fn progress_window_can_be_minimized_and_restored() {
+        assert!(options().is_minimizable);
+    }
+
+    #[test]
+    fn progress_window_declares_an_app_id_for_linux_taskbars() {
+        assert_eq!(options().app_id.as_deref(), Some(crate::APP_ID));
+    }
+
+    /// The taskbar label is read from the window title at map time, so it must
+    /// be set before the first paint rather than only in `render`.
+    #[test]
+    fn progress_window_has_a_title_before_first_paint() {
+        let title = options()
+            .titlebar
+            .and_then(|titlebar| titlebar.title)
+            .expect("a titlebar title must be set up front");
+        assert_eq!(title.as_ref(), "mcopy");
+    }
+
+    #[test]
+    fn auto_close_delay_is_short_enough_to_feel_automatic() {
+        assert!(AUTO_CLOSE_DELAY <= Duration::from_secs(2));
+    }
 }

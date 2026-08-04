@@ -26,11 +26,24 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Install the context menu into the registry (requires admin)
-    Install,
+    /// Register the file manager integration for the current user
+    ///
+    /// `install` is kept as an alias so scripts written against 0.2 keep
+    /// working, even though the name is now a little misleading: application
+    /// installation is the installer's job, and this only registers menus.
+    #[command(alias = "install")]
+    ShellInstall,
 
-    /// Remove the context menu from the registry (requires admin)
-    Uninstall,
+    /// Remove the file manager integration
+    #[command(alias = "uninstall")]
+    ShellUninstall {
+        /// Also remove the machine-wide entries left by mcopy 0.2
+        ///
+        /// This is the only operation that needs administrator rights, and it
+        /// exists solely to clean up after the previous version.
+        #[arg(long)]
+        all_users: bool,
+    },
 
     /// Copy paths into the clipboard
     Copy {
@@ -51,4 +64,7 @@ pub enum Commands {
 
     /// Clear the clipboard payload
     Clear,
+
+    /// Print what is currently copied
+    Status,
 }

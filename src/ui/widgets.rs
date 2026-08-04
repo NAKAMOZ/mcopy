@@ -1,18 +1,23 @@
-use super::theme::{
-    ACTION_BUTTON_WIDTH, ButtonTone, CARD_BG, DISABLED_BG, DISABLED_BORDER,
-    DISABLED_TEXT, MUTED_TEXT, PROGRESS_TRACK, SOFT_TEXT, SUCCESS_FILL,
-};
+use super::theme::{ACTION_BUTTON_WIDTH, ButtonTone, LOGO_ACCENT, Palette};
 use gpui::*;
 
-pub fn surface_card() -> Div {
-    div().bg(rgb(CARD_BG)).rounded_xl()
+pub fn surface_card(palette: &Palette) -> Div {
+    div().bg(rgb(palette.card_bg)).rounded_xl()
 }
 
-pub fn brand_mark() -> Div {
-    logo_mark(18., 27.)
+pub fn brand_mark(palette: &Palette) -> Div {
+    logo_mark(18., 27., palette.logo_ink)
 }
 
-pub fn logo_mark(width: f32, height: f32) -> Div {
+/// The mcopy mark: four ink bars plus one accent bar.
+///
+/// `ink` is themed (black in light mode, white in dark) while the accent bar is
+/// always [`LOGO_ACCENT`]. Because each bar is its own filled rectangle, the
+/// theme switch recolors only the bars it is given and can never shift the
+/// green — unlike a whole-element filter, which would.
+pub fn logo_mark(width: f32, height: f32, ink: u32) -> Div {
+    // The source artwork (logo.svg) is authored on a 200x300 grid; scale the
+    // bar geometry from that grid to the requested size.
     let sx = width / 200.;
     let sy = height / 300.;
     let radius = (width * 0.06).max(1.);
@@ -23,13 +28,14 @@ pub fn logo_mark(width: f32, height: f32) -> Div {
         .h(px(height))
         .flex_none()
         .overflow_hidden()
-        .child(logo_bar(0., 50., 25., 200., sx, sy, radius, 0x000000))
-        .child(logo_bar(34., 25., 23., 250., sx, sy, radius, 0x000000))
-        .child(logo_bar(66., 0., 68., 300., sx, sy, radius, 0x000000))
-        .child(logo_bar(100., 25., 66., 250., sx, sy, radius, 0x000000))
-        .child(logo_bar(134., 50., 66., 200., sx, sy, radius, SUCCESS_FILL))
+        .child(logo_bar(0., 50., 25., 200., sx, sy, radius, ink))
+        .child(logo_bar(34., 25., 23., 250., sx, sy, radius, ink))
+        .child(logo_bar(66., 0., 68., 300., sx, sy, radius, ink))
+        .child(logo_bar(100., 25., 66., 250., sx, sy, radius, ink))
+        .child(logo_bar(134., 50., 66., 200., sx, sy, radius, LOGO_ACCENT))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn logo_bar(
     left: f32,
     top: f32,
@@ -103,14 +109,14 @@ pub fn header_row(
         .child(counter)
 }
 
-pub fn progress_bar(percent: f32, fill_color: u32) -> Div {
+pub fn progress_bar(percent: f32, fill_color: u32, palette: &Palette) -> Div {
     let ratio = (percent / 100.0).clamp(0.0, 1.0);
 
     div()
         .w_full()
         .h(px(4.))
         .rounded_full()
-        .bg(rgb(PROGRESS_TRACK))
+        .bg(rgb(palette.progress_track))
         .overflow_hidden()
         .child(
             div()
@@ -121,12 +127,12 @@ pub fn progress_bar(percent: f32, fill_color: u32) -> Div {
         )
 }
 
-pub fn file_name_row(file_display: String) -> Div {
+pub fn file_name_row(file_display: String, palette: &Palette) -> Div {
     div()
         .w_full()
         .truncate()
         .text_sm()
-        .text_color(rgb(MUTED_TEXT))
+        .text_color(rgb(palette.muted_text))
         .child(file_display)
 }
 
@@ -143,12 +149,28 @@ pub fn controls_row(
         .child(primary_button)
 }
 
-pub fn message_banner(message: String) -> Div {
+/// A single-line banner under the progress bar.
+///
+/// `tone` lets callers surface an actionable failure reason (see
+/// [`crate::copy::CopyErrorKind`]) in the error color rather than the muted one,
+/// so "permission denied" reads as a problem instead of a footnote.
+pub fn message_banner(
+    message: String,
+    is_error: bool,
+    palette: &Palette,
+) -> Div {
+    let color = if is_error {
+        palette.error_text
+    } else {
+        palette.soft_text
+    };
+
     div()
         .w_full()
         .h(px(16.))
         .text_xs()
-        .text_color(rgb(SOFT_TEXT))
+        .truncate()
+        .text_color(rgb(color))
         .child(message)
 }
 
@@ -157,8 +179,15 @@ pub fn action_button(
     label: &'static str,
     tone: ButtonTone,
     disabled: bool,
+    palette: &Palette,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
+    let weight = if matches!(tone, ButtonTone::Outline) {
+        FontWeight::MEDIUM
+    } else {
+        FontWeight::BOLD
+    };
+
     let base = div()
         .id(id)
         .w(px(ACTION_BUTTON_WIDTH))
@@ -170,34 +199,27 @@ pub fn action_button(
         .border_1()
         .font_family("Inter")
         .text_sm()
+        .font_weight(weight)
         .child(label.to_string());
 
     if disabled {
-        base.bg(rgb(DISABLED_BG))
-            .border_color(rgb(DISABLED_BORDER))
-            .text_color(rgb(DISABLED_TEXT))
-            .font_weight(if matches!(tone, ButtonTone::Outline) {
-                FontWeight::MEDIUM
-            } else {
-                FontWeight::BOLD
-            })
+        base.bg(rgb(palette.disabled_bg))
+            .border_color(rgb(palette.disabled_border))
+            .text_color(rgb(palette.disabled_text))
             .cursor_default()
     } else {
-        base.bg(rgb(tone.background()))
-            .border_color(rgb(tone.border()))
-            .text_color(rgb(tone.text()))
-            .font_weight(if matches!(tone, ButtonTone::Outline) {
-                FontWeight::MEDIUM
-            } else {
-                FontWeight::BOLD
-            })
-            .hover(move |this| {
-                this.bg(rgb(tone.hover_background()))
-                    .border_color(rgb(tone.border()))
-            })
+        let (hover_bg, active_bg, border) = (
+            tone.hover_background(palette),
+            tone.active_background(palette),
+            tone.border(palette),
+        );
+
+        base.bg(rgb(tone.background(palette)))
+            .border_color(rgb(border))
+            .text_color(rgb(tone.text(palette)))
+            .hover(move |this| this.bg(rgb(hover_bg)).border_color(rgb(border)))
             .active(move |this| {
-                this.bg(rgb(tone.active_background()))
-                    .border_color(rgb(tone.border()))
+                this.bg(rgb(active_bg)).border_color(rgb(border))
             })
             .cursor_pointer()
             .on_click(on_click)

@@ -2,13 +2,15 @@ mod state;
 
 use crate::platform;
 use crate::ui::assets::register_fonts;
-use crate::ui::theme::{
-    BLACK_FILL, BLACK_HOVER, CARD_BG, ERROR_TEXT, INSTALL_DISABLED_BG,
-    MUTED_TEXT, SUCCESS_FILL, SUCCESS_HOVER, TITLE_TEXT,
+use crate::ui::shutdown::{
+    self, ShutdownRequest, quit_when_last_window_closes,
 };
+use crate::ui::theme::Palette;
 use crate::ui::widgets::logo_mark;
 use gpui::*;
-use state::{InstallOperation, InstallRenderState, start_operation};
+use state::{
+    InstallOperation, InstallRenderState, OperationWorker, start_operation,
+};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
@@ -34,23 +36,30 @@ const VERSION_TOP_TALL: f32 = 252.0;
 pub struct InstallWindow {
     exe_path: PathBuf,
     state: Arc<Mutex<InstallRenderState>>,
+    worker: Arc<OperationWorker>,
     notify: Arc<Notify>,
+    shutdown: ShutdownRequest,
     refresh_loop_started: bool,
     close_guard_registered: bool,
+    appearance_observer: Option<Subscription>,
 }
 
 impl InstallWindow {
     fn new(
         exe_path: PathBuf,
         state: Arc<Mutex<InstallRenderState>>,
+        worker: Arc<OperationWorker>,
         notify: Arc<Notify>,
     ) -> Self {
         Self {
             exe_path,
             state,
+            worker,
             notify,
+            shutdown: ShutdownRequest::new(),
             refresh_loop_started: false,
             close_guard_registered: false,
+            appearance_observer: None,
         }
     }
 
@@ -84,6 +93,22 @@ impl InstallWindow {
             .detach();
     }
 
+    fn ensure_appearance_observer(&mut self, window: &mut Window) {
+        if self.appearance_observer.is_some() {
+            return;
+        }
+
+        self.appearance_observer = Some(
+            window.observe_window_appearance(|window, _| window.refresh()),
+        );
+    }
+
+    /// Accept every close request on the first try.
+    ///
+    /// 0.2 returned `!is_busy()` here, which silently vetoed the OS close button
+    /// for the whole duration of an install: the click did nothing, with no
+    /// feedback and no way to abandon the operation. Closing now always
+    /// succeeds; the worker is signalled and joined during teardown.
     fn ensure_close_guard(
         &mut self,
         window: &mut Window,
@@ -94,10 +119,22 @@ impl InstallWindow {
         }
 
         self.close_guard_registered = true;
-        let state = self.state.clone();
+        let shutdown = self.shutdown.clone();
+        let worker = self.worker.clone();
         window.on_window_should_close(cx, move |_, _| {
-            !state.lock().unwrap().is_busy()
+            if shutdown.begin() {
+                worker.shutdown();
+            }
+            true
         });
+    }
+
+    /// Close the window through the one shared shutdown path.
+    fn request_close(&self, window: &mut Window) {
+        if self.shutdown.begin() {
+            self.worker.shutdown();
+        }
+        shutdown::close(window);
     }
 }
 
@@ -109,14 +146,17 @@ impl Render for InstallWindow {
     ) -> impl IntoElement {
         self.ensure_refresh_loop(window, cx);
         self.ensure_close_guard(window, cx);
+        self.ensure_appearance_observer(window);
 
+        let palette = Palette::for_appearance(window.appearance());
         let snapshot = self.state.lock().unwrap().clone();
-        let visual = resolve_install_visual(&snapshot);
+        let visual = resolve_install_visual(&snapshot, &palette);
 
         window.set_window_title(visual.window_title);
         window.resize(size(px(INSTALL_WINDOW_WIDTH), px(visual.window_height)));
 
         let state = self.state.clone();
+        let worker = self.worker.clone();
         let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let install_cta = install_action_button(
@@ -129,6 +169,7 @@ impl Render for InstallWindow {
             move |_, window, _| {
                 if start_operation(
                     state.clone(),
+                    worker.clone(),
                     notify.clone(),
                     exe_path.clone(),
                     InstallOperation::Install,
@@ -139,18 +180,20 @@ impl Render for InstallWindow {
         );
 
         let state = self.state.clone();
+        let worker = self.worker.clone();
         let notify = self.notify.clone();
         let exe_path = self.exe_path.clone();
         let uninstall_cta = install_action_button(
             "uninstall-mcopy",
             "Uninstall",
             snapshot.is_busy(),
-            BLACK_FILL,
-            BLACK_HOVER,
-            CARD_BG,
+            palette.neutral_fill,
+            palette.neutral_hover,
+            palette.on_fill_text,
             move |_, window, _| {
                 if start_operation(
                     state.clone(),
+                    worker.clone(),
                     notify.clone(),
                     exe_path.clone(),
                     InstallOperation::Uninstall,
@@ -160,11 +203,15 @@ impl Render for InstallWindow {
             },
         );
 
+        let close = cx.listener(|this, _: &ClickEvent, window, _| {
+            this.request_close(window);
+        });
+
         let mut card = div()
             .relative()
             .w(px(INSTALL_WINDOW_WIDTH))
             .h(px(visual.window_height))
-            .bg(rgb(CARD_BG))
+            .bg(rgb(palette.card_bg))
             .rounded(px(12.))
             .font_family("Inter")
             .child(
@@ -176,8 +223,8 @@ impl Render for InstallWindow {
                     .h(px(DRAG_AREA_HEIGHT))
                     .window_control_area(WindowControlArea::Drag),
             )
-            .child(header())
-            .child(close_button(snapshot.is_busy()))
+            .child(header(&palette))
+            .child(close_button(&palette, close))
             .child(
                 div()
                     .absolute()
@@ -185,13 +232,14 @@ impl Render for InstallWindow {
                     .top(px(visual.install_button_top))
                     .child(install_cta),
             )
-            .child(version_label(visual.version_top));
+            .child(version_label(visual.version_top, &palette));
 
         if let Some(status) = visual.status_line {
             card = card.child(status_label(
                 status,
                 snapshot.is_error,
                 visual.status_top,
+                &palette,
             ));
         }
 
@@ -224,72 +272,71 @@ struct InstallVisual {
     show_uninstall: bool,
 }
 
-fn resolve_install_visual(state: &InstallRenderState) -> InstallVisual {
+fn resolve_install_visual(
+    state: &InstallRenderState,
+    palette: &Palette,
+) -> InstallVisual {
+    let disabled = InstallVisual {
+        window_title: "mcopy - Install",
+        window_height: INSTALL_WINDOW_HEIGHT,
+        status_line: None,
+        status_top: STATUS_TOP,
+        install_label: "Install",
+        install_disabled: true,
+        install_background: palette.install_disabled_bg,
+        install_hover: palette.install_disabled_bg,
+        install_text: palette.muted_text,
+        install_button_top: INSTALL_BUTTON_TOP,
+        version_top: VERSION_TOP_COMPACT,
+        show_uninstall: false,
+    };
+
     match state.active_operation {
         Some(InstallOperation::Install) => InstallVisual {
             window_title: "mcopy - Installing",
-            window_height: INSTALL_WINDOW_HEIGHT,
             status_line: Some("Installing".to_string()),
-            status_top: STATUS_TOP,
             install_label: "Installing",
-            install_disabled: true,
-            install_background: INSTALL_DISABLED_BG,
-            install_hover: INSTALL_DISABLED_BG,
-            install_text: MUTED_TEXT,
-            install_button_top: INSTALL_BUTTON_TOP,
-            version_top: VERSION_TOP_COMPACT,
-            show_uninstall: false,
+            ..disabled
         },
         Some(InstallOperation::Uninstall) => InstallVisual {
             window_title: "mcopy - Uninstalling",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Uninstalling".to_string()),
-            status_top: STATUS_TOP,
-            install_label: "Install",
-            install_disabled: true,
-            install_background: INSTALL_DISABLED_BG,
-            install_hover: INSTALL_DISABLED_BG,
-            install_text: MUTED_TEXT,
-            install_button_top: INSTALL_BUTTON_TOP,
             version_top: VERSION_TOP_TALL,
             show_uninstall: true,
+            ..disabled
+        },
+        // A volatile location blocks installation entirely; the message says
+        // what to do about it.
+        None if state.is_blocked() => InstallVisual {
+            window_title: "mcopy - Not Installed",
+            status_line: Some(state.message.clone()),
+            ..disabled
         },
         None if state.install_state.is_current_version() => InstallVisual {
             window_title: "mcopy - Already Installed",
             window_height: INSTALLED_WINDOW_HEIGHT,
             status_line: Some("Already installed".to_string()),
-            status_top: STATUS_TOP,
-            install_label: "Install",
-            install_disabled: true,
-            install_background: INSTALL_DISABLED_BG,
-            install_hover: INSTALL_DISABLED_BG,
-            install_text: MUTED_TEXT,
-            install_button_top: INSTALL_BUTTON_TOP,
             version_top: VERSION_TOP_TALL,
             show_uninstall: true,
+            ..disabled
         },
         None => InstallVisual {
-            window_title: "mcopy - Install",
-            window_height: INSTALL_WINDOW_HEIGHT,
+            install_disabled: false,
+            install_background: palette.success_fill,
+            install_hover: palette.success_hover,
+            install_text: palette.on_fill_text,
             status_line: if state.message.is_empty() {
                 None
             } else {
                 Some(state.message.clone())
             },
-            status_top: STATUS_TOP,
-            install_label: "Install",
-            install_disabled: false,
-            install_background: SUCCESS_FILL,
-            install_hover: SUCCESS_HOVER,
-            install_text: CARD_BG,
-            install_button_top: INSTALL_BUTTON_TOP,
-            version_top: VERSION_TOP_COMPACT,
-            show_uninstall: false,
+            ..disabled
         },
     }
 }
 
-fn header() -> Div {
+fn header(palette: &Palette) -> Div {
     div()
         .child(
             div()
@@ -298,7 +345,7 @@ fn header() -> Div {
                 .top(px(24.))
                 .w(px(27.))
                 .h(px(41.))
-                .child(logo_mark(27., 41.)),
+                .child(logo_mark(27., 41., palette.logo_ink)),
         )
         .child(
             div()
@@ -308,7 +355,7 @@ fn header() -> Div {
                 .text_size(px(16.))
                 .line_height(px(19.))
                 .font_weight(FontWeight::BOLD)
-                .text_color(rgb(TITLE_TEXT))
+                .text_color(rgb(palette.title_text))
                 .child("mcopy"),
         )
         .child(
@@ -318,13 +365,20 @@ fn header() -> Div {
                 .top(px(51.))
                 .text_size(px(12.))
                 .line_height(px(15.))
-                .text_color(rgb(MUTED_TEXT))
+                .text_color(rgb(palette.muted_text))
                 .child("Fast and reliable file copy utility."),
         )
 }
 
-fn close_button(disabled: bool) -> impl IntoElement {
-    let base = div()
+/// The close button is always live.
+///
+/// 0.2 disabled it while an operation ran, which combined with the vetoing
+/// `on_window_should_close` handler left no way at all to dismiss the window.
+fn close_button(
+    palette: &Palette,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    div()
         .id("close-install-window")
         .absolute()
         .left(px(264.))
@@ -338,20 +392,26 @@ fn close_button(disabled: bool) -> impl IntoElement {
         .text_size(px(14.))
         .line_height(px(14.))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(rgb(MUTED_TEXT))
-        .child("x");
-
-    if disabled {
-        base.cursor_default()
-    } else {
-        base.hover(|this| this.bg(rgb(0xf5f5f5)).text_color(rgb(TITLE_TEXT)))
-            .active(|this| this.bg(rgb(0xeeeeee)).text_color(rgb(TITLE_TEXT)))
-            .cursor_pointer()
-            .on_click(|_, _, cx| cx.quit())
-    }
+        .text_color(rgb(palette.muted_text))
+        .child("x")
+        .hover(|this| {
+            this.bg(rgb(palette.outline_hover_bg))
+                .text_color(rgb(palette.title_text))
+        })
+        .active(|this| {
+            this.bg(rgb(palette.outline_active_bg))
+                .text_color(rgb(palette.title_text))
+        })
+        .cursor_pointer()
+        .on_click(on_click)
 }
 
-fn status_label(label: String, is_error: bool, top: f32) -> Div {
+fn status_label(
+    label: String,
+    is_error: bool,
+    top: f32,
+    palette: &Palette,
+) -> Div {
     div()
         .absolute()
         .left(px(SIDE_PADDING))
@@ -360,11 +420,15 @@ fn status_label(label: String, is_error: bool, top: f32) -> Div {
         .text_center()
         .text_size(px(12.))
         .line_height(px(15.))
-        .text_color(rgb(if is_error { ERROR_TEXT } else { MUTED_TEXT }))
+        .text_color(rgb(if is_error {
+            palette.error_text
+        } else {
+            palette.muted_text
+        }))
         .child(label)
 }
 
-fn version_label(top: f32) -> Div {
+fn version_label(top: f32, palette: &Palette) -> Div {
     div()
         .absolute()
         .left(px(SIDE_PADDING))
@@ -373,10 +437,11 @@ fn version_label(top: f32) -> Div {
         .text_center()
         .text_size(px(11.))
         .line_height(px(14.))
-        .text_color(rgb(MUTED_TEXT))
+        .text_color(rgb(palette.muted_text))
         .child(format!("v{}", platform::CURRENT_VERSION))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn install_action_button(
     id: &'static str,
     label: &'static str,
@@ -412,50 +477,122 @@ fn install_action_button(
     }
 }
 
+/// Window options for the setup window.
+///
+/// `WindowKind::Normal` matters here for a different reason than in the progress
+/// window: on macOS a `PopUp` is a non-activating `NSPanel`, so the first click
+/// on an unfocused panel is consumed by activation and never reaches the close
+/// button — one of the two causes of "the close button needs a second click".
+pub(crate) fn install_window_options(bounds: Bounds<Pixels>) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: Some(TitlebarOptions {
+            title: Some("mcopy".into()),
+            appears_transparent: true,
+            ..Default::default()
+        }),
+        focus: true,
+        show: true,
+        kind: WindowKind::Normal,
+        is_resizable: false,
+        is_minimizable: true,
+        app_id: Some(crate::APP_ID.to_string()),
+        window_background: WindowBackgroundAppearance::Transparent,
+        window_decorations: Some(WindowDecorations::Client),
+        ..Default::default()
+    }
+}
+
 pub fn show_install_window(exe_path: PathBuf) {
-    let state = InstallRenderState::probe();
+    let state = InstallRenderState::probe(&exe_path);
     let window_height = if state.install_state.is_current_version() {
         INSTALLED_WINDOW_HEIGHT
     } else {
         INSTALL_WINDOW_HEIGHT
     };
     let state = Arc::new(Mutex::new(state));
+    let worker = Arc::new(OperationWorker::new());
     let notify = Arc::new(Notify::new());
+
+    let worker_for_exit = worker.clone();
 
     Application::new().run(move |cx| {
         register_fonts(cx);
+        quit_when_last_window_closes(cx);
+
         let bounds = Bounds::centered(
             None,
             size(px(INSTALL_WINDOW_WIDTH), px(window_height)),
             cx,
         );
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: None,
-            focus: true,
-            show: true,
-            kind: WindowKind::PopUp,
-            is_resizable: false,
-            is_minimizable: false,
-            window_background: WindowBackgroundAppearance::Transparent,
-            window_decorations: Some(WindowDecorations::Client),
-            ..Default::default()
-        };
 
-        cx.open_window(options, move |_, cx| {
+        let opened = cx.open_window(install_window_options(bounds), {
             let exe_path = exe_path.clone();
             let state = state.clone();
+            let worker = worker.clone();
             let notify = notify.clone();
-            cx.new(move |_| {
-                InstallWindow::new(
-                    exe_path.clone(),
-                    state.clone(),
-                    notify.clone(),
-                )
-            })
-        })
-        .unwrap();
+            move |_, cx| {
+                cx.new(move |_| {
+                    InstallWindow::new(
+                        exe_path.clone(),
+                        state.clone(),
+                        worker.clone(),
+                        notify.clone(),
+                    )
+                })
+            }
+        });
+
+        if let Err(error) = opened {
+            crate::log_error!("could not open the setup window: {error}");
+            cx.quit();
+            return;
+        }
 
         cx.activate(true);
     });
+
+    // The event loop has returned, so no further UI work can start. Make sure
+    // the worker is finished before the process exits, so an install is never
+    // left half-written and no thread outlives the window.
+    worker_for_exit.shutdown();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // `use gpui::*` above pulls in gpui's own `test` attribute macro, which
+    // would shadow the built-in one and expand recursively. Bind the built-in
+    // back explicitly.
+    use core::prelude::v1::test;
+
+    fn options() -> WindowOptions {
+        install_window_options(Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(INSTALL_WINDOW_WIDTH), px(INSTALL_WINDOW_HEIGHT)),
+        })
+    }
+
+    /// Regression guard for issue 4: a non-activating macOS panel swallows the
+    /// first click, which is half of why one click sometimes did nothing.
+    #[test]
+    fn setup_window_is_a_normal_window() {
+        assert_eq!(options().kind, WindowKind::Normal);
+    }
+
+    #[test]
+    fn setup_window_appears_in_the_taskbar_with_a_title() {
+        let options = options();
+        assert!(options.is_minimizable);
+        let title = options
+            .titlebar
+            .and_then(|titlebar| titlebar.title)
+            .expect("a titlebar title must be set up front");
+        assert_eq!(title.as_ref(), "mcopy");
+    }
+
+    #[test]
+    fn setup_window_declares_an_app_id() {
+        assert_eq!(options().app_id.as_deref(), Some(crate::APP_ID));
+    }
 }
