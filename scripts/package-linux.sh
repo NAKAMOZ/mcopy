@@ -85,7 +85,9 @@ resolve_dependencies() {
     [ -n "$pkg" ] && packages+=("$pkg")
   done <<< "$libs"
 
-  printf '%s\n' "${packages[@]}" | sort -u | paste -sd', ' -
+  printf '%s\n' "${packages[@]}" \
+    | sort -u \
+    | awk 'BEGIN { separator = "" } { printf "%s%s", separator, $0; separator = ", " } END { if (NR) print "" }'
 }
 
 DEPENDS="$(resolve_dependencies || true)"
