@@ -18,6 +18,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. "$(dirname "$0")/identity.sh"
 
 BIN="${1:-target/release/mcopy}"
 if [ ! -f "$BIN" ]; then
@@ -28,7 +29,7 @@ fi
 
 [ -f logo.icns ] || { echo "error: logo.icns missing — run scripts/make-icns.sh" >&2; exit 1; }
 
-VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+VERSION="$APP_VERSION"
 APP="dist/mcopy.app"
 
 rm -rf "$APP"
@@ -50,6 +51,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>mcopy</string>
     <key>CFBundleIdentifier</key>
     <string>${APP_ID}</string>
+    <key>CFBundleGetInfoString</key>
+    <string>${VERSION}, ${APP_COPYRIGHT}</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -63,7 +66,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key>
-    <string>${COPYRIGHT}</string>
+    <string>${APP_COPYRIGHT}</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

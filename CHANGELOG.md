@@ -26,6 +26,12 @@ downloaded.
   pasting with an empty clipboard or into an unwritable folder.
 - A log file under the platform's standard location, controlled by `MCOPY_LOG`.
   It records paths and error kinds, never file contents.
+- **The application now has an owner on every platform.** Windows File
+  Properties, Add/Remove Programs, the macOS bundle, the Debian package and the
+  Linux software centres all show NAKAMOZ as publisher and the MIT copyright.
+  The Windows binary previously carried no version resource at all.
+- Draft manifests for Winget, Homebrew and AppStream, generated from the built
+  artifacts so their checksums always match what is being published.
 - `mcopy status` prints what is currently copied.
 - The destination is validated before a paste begins: it must exist or be
   creatable, be a directory, be writable, and not sit inside a copied source.
@@ -50,6 +56,12 @@ downloaded.
   for multi-item selections.
 - Thunar support was removed. It was never actually installed — the previous
   version only printed setup instructions to a stream nobody could see.
+- **The application identifier changed from `com.mcopy.app` to
+  `io.github.nakamoz.mcopy`.** The old value implied ownership of a domain the
+  project does not control. macOS treats the new identifier as a different
+  application, so any privacy (TCC) permissions granted to 0.2 must be granted
+  again. The Linux desktop entry, icon and AppStream component are all named
+  after it now.
 
 ### Fixed
 

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream component metadata.
+
+  This is what graphical software centres (GNOME Software, KDE Discover) and
+  Flathub read to attribute an application. Without it the package installs but
+  shows no developer, no description and no license, which is exactly the
+  "installed application with no owner" problem this file exists to fix.
+
+  Copyright 2026 Nevzat ÇELİKKANAT
+  Validate with:  appstreamcli validate --pedantic <this file>
+-->
+<component type="desktop-application">
+  <id>io.github.nakamoz.mcopy</id>
+
+  <name>mcopy</name>
+  <summary>Fast, queue-aware file and folder copying</summary>
+
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="io.github.nakamoz">
+    <name>NAKAMOZ</name>
+  </developer>
+
+  <description>
+    <p>
+      mcopy turns the file manager right-click gesture into an asynchronous copy
+      pipeline with a live progress window and cooperative pause, resume and
+      cancel controls.
+    </p>
+    <p>
+      Instead of a progress dialog you cannot influence, a copy started from
+      Nautilus or Dolphin opens a window you can minimise, come back to, pause
+      mid-run, or cancel — and which tells you exactly why an item was skipped
+      rather than reporting an anonymous failure count.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Copy and paste entries in Nautilus and Dolphin</li>
+      <li>Concurrent copying that scales with the available cores</li>
+      <li>Pause, resume and cancel without restarting the queue</li>
+      <li>A Paste entry that only appears when something has been copied</li>
+      <li>Clear, actionable reasons when an item cannot be copied</li>
+      <li>No root privileges required at any point</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.nakamoz.mcopy.desktop</launchable>
+
+  <url type="homepage">https://github.com/NAKAMOZ/mcopy</url>
+  <url type="bugtracker">https://github.com/NAKAMOZ/mcopy/issues</url>
+  <url type="vcs-browser">https://github.com/NAKAMOZ/mcopy</url>
+
+  <categories>
+    <category>Utility</category>
+    <category>FileTools</category>
+  </categories>
+
+  <keywords>
+    <keyword>copy</keyword>
+    <keyword>paste</keyword>
+    <keyword>files</keyword>
+    <keyword>folders</keyword>
+    <keyword>file manager</keyword>
+  </keywords>
+
+  <provides>
+    <binary>mcopy</binary>
+  </provides>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.3.0" date="2026-08-04">
+      <description>
+        <p>
+          Adds Linux support alongside Windows and macOS, native installers for
+          every platform, and a theme-aware interface.
+        </p>
+        <ul>
+          <li>Linux support with Nautilus and Dolphin integration</li>
+          <li>The logo follows the system light and dark theme</li>
+          <li>The copy progress window appears in the taskbar and can be restored</li>
+          <li>The Paste entry is hidden until something has been copied</li>
+          <li>Copy state is cleared after a successful paste</li>
+          <li>Failed copies explain why instead of reporting a bare count</li>
+        </ul>
+      </description>
+      <url type="details">https://github.com/NAKAMOZ/mcopy/releases/tag/v0.3.0</url>
+    </release>
+    <release version="0.2.0" date="2026-06-29" />
+  </releases>
+</component>

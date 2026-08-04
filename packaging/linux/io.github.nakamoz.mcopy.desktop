@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=mcopy
+GenericName=File Copy Utility
+Comment=Fast and reliable file copy utility
+Exec=mcopy
+Icon=io.github.nakamoz.mcopy
+Terminal=false
+Categories=Utility;FileTools;
+Keywords=copy;paste;files;folders;
+StartupNotify=true
+# Must match the app_id the windows declare (mcopy::APP_ID), so Wayland and X11
+# taskbars pair the running window with this entry and show the right name and
+# icon. The file name itself must also match, for AppStream and for portals.
+StartupWMClass=io.github.nakamoz.mcopy

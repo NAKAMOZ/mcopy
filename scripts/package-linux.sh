@@ -13,9 +13,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. "$(dirname "$0")/identity.sh"
 
-VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-[ -n "$VERSION" ] || { echo "error: could not read package.version from Cargo.toml" >&2; exit 1; }
+VERSION="$APP_VERSION"
 
 BIN="${1:-target/release/mcopy}"
 if [ ! -f "$BIN" ]; then
@@ -24,9 +24,13 @@ if [ ! -f "$BIN" ]; then
   BIN="target/release/mcopy"
 fi
 
-DESKTOP="packaging/linux/mcopy.desktop"
+# The desktop entry, icon and AppStream component are all named after the
+# application id. That is not cosmetic: the icon lookup, the AppStream/desktop
+# pairing and the Wayland window-to-launcher match all key off the same string.
+DESKTOP="packaging/linux/${APP_ID}.desktop"
+METAINFO="packaging/linux/${APP_ID}.metainfo.xml"
 ICON="logo.svg"
-for required in "$DESKTOP" "$ICON" LICENSE; do
+for required in "$DESKTOP" "$METAINFO" "$ICON" LICENSE README.md; do
   [ -f "$required" ] || { echo "error: $required is missing" >&2; exit 1; }
 done
 
@@ -38,12 +42,28 @@ trap 'rm -rf "$WORK"' EXIT
 # to an install prefix so the tarball can target ~/.local instead of /usr.
 stage_tree() {
   local root="$1" prefix="$2"
-  install -Dm755 "$BIN"     "$root$prefix/bin/mcopy"
-  install -Dm644 "$DESKTOP" "$root$prefix/share/applications/mcopy.desktop"
-  install -Dm644 "$ICON"    "$root$prefix/share/icons/hicolor/scalable/apps/mcopy.svg"
-  install -Dm644 LICENSE    "$root$prefix/share/doc/mcopy/copyright"
-  install -Dm644 README.md  "$root$prefix/share/doc/mcopy/README.md"
+  install -Dm755 "$BIN"      "$root$prefix/bin/mcopy"
+  install -Dm644 "$DESKTOP"  "$root$prefix/share/applications/${APP_ID}.desktop"
+  install -Dm644 "$METAINFO" "$root$prefix/share/metainfo/${APP_ID}.metainfo.xml"
+  install -Dm644 "$ICON"     "$root$prefix/share/icons/hicolor/scalable/apps/${APP_ID}.svg"
+  install -Dm644 LICENSE     "$root$prefix/share/doc/mcopy/copyright"
+  install -Dm644 README.md   "$root$prefix/share/doc/mcopy/README.md"
 }
+
+# Validate the AppStream component when the tooling is available. A malformed
+# component is silently ignored by software centres, which would put us back to
+# an application nobody can attribute.
+if command -v appstreamcli >/dev/null 2>&1; then
+  appstreamcli validate --no-net "$METAINFO" \
+    || { echo "error: AppStream metadata failed validation" >&2; exit 1; }
+else
+  echo "note: appstreamcli not installed; skipping metainfo validation" >&2
+fi
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$DESKTOP" \
+    || { echo "error: desktop entry failed validation" >&2; exit 1; }
+fi
 
 # ---------------------------------------------------------------- deb --------
 
@@ -86,10 +106,10 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: amd64
-Maintainer: mcopy maintainers <noreply@github.com>
+Maintainer: ${APP_MAINTAINER}
 Installed-Size: ${INSTALLED_SIZE}
 Depends: ${DEPENDS}
-Homepage: https://github.com/NAKAMOZ/mcopy
+Homepage: ${APP_HOMEPAGE}
 Description: Fast and reliable file copy utility
  mcopy turns the file manager right-click gesture into an asynchronous copy
  pipeline with a live progress window and pause, resume and cancel controls.
@@ -159,23 +179,30 @@ prefix="${HOME}/.local"
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --prefix) prefix="$2"; shift 2 ;;
-        -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 1 ;;
     esac
 done
 
 here="$(cd "$(dirname "$0")" && pwd)"
 
-install -Dm755 "$here/bin/mcopy" "$prefix/bin/mcopy"
-install -Dm644 "$here/share/applications/mcopy.desktop" \
-    "$prefix/share/applications/mcopy.desktop"
-install -Dm644 "$here/share/icons/hicolor/scalable/apps/mcopy.svg" \
-    "$prefix/share/icons/hicolor/scalable/apps/mcopy.svg"
-install -Dm644 "$here/share/doc/mcopy/copyright" \
-    "$prefix/share/doc/mcopy/copyright"
+# Mirror the staged layout rather than naming each file. The desktop entry,
+# icon and AppStream component are all named after the application id, and
+# copying the tree keeps this script from having to repeat that id.
+find "$here/bin" "$here/share" -type f 2>/dev/null | while IFS= read -r file; do
+    relative="${file#"$here"/}"
+    case "$relative" in
+        bin/*) mode=755 ;;
+        *)     mode=644 ;;
+    esac
+    install -D -m "$mode" "$file" "$prefix/$relative"
+done
 
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q "$prefix/share/applications" || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -qtf "$prefix/share/icons/hicolor" 2>/dev/null || true
 fi
 
 echo "Installed mcopy to $prefix/bin/mcopy"
@@ -193,18 +220,23 @@ chmod 755 "$TAR_ROOT/install.sh"
 cat > "$TAR_ROOT/uninstall.sh" <<'UNINSTALL'
 #!/bin/sh
 # Remove a user-level mcopy install.
+#
+# Run from the extracted tarball, so the file list matches what was installed.
+#
+# Usage: ./uninstall.sh [prefix]        (default: ~/.local)
 set -eu
 
 prefix="${1:-${HOME}/.local}"
+here="$(cd "$(dirname "$0")" && pwd)"
 
 if [ -x "$prefix/bin/mcopy" ]; then
     "$prefix/bin/mcopy" shell-uninstall || true
 fi
 
-rm -f "$prefix/bin/mcopy" \
-      "$prefix/share/applications/mcopy.desktop" \
-      "$prefix/share/icons/hicolor/scalable/apps/mcopy.svg" \
-      "$prefix/share/doc/mcopy/copyright"
+find "$here/bin" "$here/share" -type f 2>/dev/null | while IFS= read -r file; do
+    rm -f "$prefix/${file#"$here"/}"
+done
+
 rmdir "$prefix/share/doc/mcopy" 2>/dev/null || true
 
 echo "Removed mcopy from $prefix"

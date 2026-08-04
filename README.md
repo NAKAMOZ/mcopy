@@ -19,6 +19,7 @@ copy state, copy orchestration, and UI.
 - [Permissions](#permissions)
 - [Architecture](#architecture)
 - [Development](#development)
+- [Publishing to package registries](#publishing-to-package-registries)
 - [Upgrading from 0.2](#upgrading-from-02)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
@@ -239,6 +240,67 @@ src/
 Platform differences live behind the `ContextMenu` trait, selected in exactly one
 place in `platform/mod.rs`. Nothing else in the codebase branches on the OS.
 
+### Project identity
+
+Every installer, package and registry manifest has to agree on who publishes
+mcopy and what it is called. Those values are declared once and read by
+everything else:
+
+| Value | Declared in |
+| --- | --- |
+| App id `io.github.nakamoz.mcopy` | `mcopy::APP_ID` in `src/lib.rs` |
+| Publisher `NAKAMOZ` | `mcopy::APP_PUBLISHER` |
+| Copyright | `mcopy::APP_COPYRIGHT` |
+| Version, description, homepage, license, author | `Cargo.toml` `[package]` |
+
+`scripts/identity.sh` and `scripts/Identity.ps1` parse those two files, and every
+packaging script sources one of them. `build.rs` carries its own copy of the
+publisher and copyright (a build script cannot depend on the crate it builds) and
+exports what it embedded, which a unit test in `src/lib.rs` asserts against the
+constants — so the shipped binary's File Properties can never disagree with the
+`.deb`, the `.pkg` or the winget manifest.
+
+The app id is load-bearing rather than decorative. It is simultaneously the macOS
+`CFBundleIdentifier` and installer package id, the Wayland/X11 `app_id`, the
+`.desktop` file's name, the AppStream component id, and the Finder Services
+bundle prefix. A mismatch between any two shows up as a window with no icon or an
+application a software centre cannot attribute.
+
+## Publishing to package registries
+
+The release workflow produces the installers; the registry manifests are
+generated next to them so their checksums always match the artifact being
+described.
+
+**Winget** — after publishing the GitHub release:
+
+```powershell
+.\scripts\package-windows.ps1        # produces dist\mcopy-setup-<version>-x86_64.exe
+.\scripts\package-winget.ps1         # produces dist\winget\manifests\...
+winget validate --manifest dist\winget\manifests\n\NAKAMOZ\mcopy\<version>
+```
+
+Copy that directory into a fork of
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) and open a pull
+request. The `InstallerUrl` must already resolve, so publish the release first.
+
+**Homebrew** — `scripts/package-macos.sh` writes `dist/mcopy.rb` alongside the
+disk image, with that image's SHA256 already filled in:
+
+```bash
+brew audit --cask --new --online dist/mcopy.rb
+```
+
+Submit it to [homebrew-cask](https://github.com/Homebrew/homebrew-cask), or host
+it in a personal tap.
+
+**Linux distributions** — the `.deb` carries a proper `Maintainer`, `Homepage`
+and dependency list derived from the linked binary, and installs an AppStream
+component so GNOME Software and KDE Discover show the developer, description and
+license. `scripts/package-linux.sh` validates both the AppStream metadata and the
+desktop entry when `appstreamcli` and `desktop-file-validate` are available; CI
+installs them so validation always runs there.
+
 ### Tech stack
 
 Rust 2024 · Tokio · Futures · Clap · Indicatif · GPUI · arboard · dirs
@@ -261,6 +323,10 @@ Packaging:
 ./scripts/package-macos.sh           # macOS only; uses built-in tools
 ./scripts/package-linux.sh           # needs dpkg-deb
 ```
+
+Bumping the version means editing `Cargo.toml` only — the Windows version
+resource, the Inno installer, the `.app` bundle, the `.deb` control file and the
+registry manifests all read it from there.
 
 Manual test coverage that CI cannot reach is listed in
 [docs/VALIDATION.md](docs/VALIDATION.md).
@@ -293,7 +359,10 @@ section as the release notes.
   release, but it is a visible behavior change if you relied on pasting the same
   selection repeatedly. Copy again to paste again.
 - **macOS: reinstall the app bundle.** 0.3 removes `LSUIElement`, which had
-  suppressed the Dock icon entirely.
+  suppressed the Dock icon entirely. The bundle identifier also changed from
+  `com.mcopy.app` to `io.github.nakamoz.mcopy`, so macOS treats it as a new
+  application and any privacy (Full Disk Access) permission must be granted
+  again.
 - **`install` / `uninstall` are now `shell-install` / `shell-uninstall`.** The
   old names still work.
 - **Thunar users:** support was removed. It never actually worked; the previous

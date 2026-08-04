@@ -41,7 +41,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libfontconfig1-dev libfreetype6-dev \
-            libvulkan-dev libssl-dev pkg-config
+            libvulkan-dev libssl-dev pkg-config \
+            appstream desktop-file-utils
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -81,7 +82,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libfontconfig1-dev libfreetype6-dev \
-            libvulkan-dev libssl-dev pkg-config
+            libvulkan-dev libssl-dev pkg-config \
+            appstream desktop-file-utils
 
       - name: Build (release)
         run: cargo build --release --locked
@@ -102,11 +104,33 @@ jobs:
         run: |
           set -euo pipefail
           deb="$(ls dist/mcopy_*_amd64.deb)"
+
+          # The Maintainer field is what gives the installed package an owner;
+          # a placeholder here would ship an unattributed package.
+          maintainer="$(dpkg-deb --field "$deb" Maintainer)"
+          echo "Maintainer: $maintainer"
+          case "$maintainer" in
+            *noreply@github.com*|*users.noreply.github.com*) ;;
+            *) echo "unexpected Maintainer: $maintainer" >&2; exit 1 ;;
+          esac
+          test -n "$(dpkg-deb --field "$deb" Homepage)"
+
           sudo apt-get install -y "./$deb"
           command -v mcopy
           # Launching from PATH after installing is the behaviour that broke in
           # 0.2, where the menu entries pointed at the download directory.
           mcopy --version
           mcopy status
+
+          # The desktop entry, icon and AppStream component must all be named
+          # after the application id, or software centres cannot pair them.
+          test -f /usr/share/applications/io.github.nakamoz.mcopy.desktop
+          test -f /usr/share/metainfo/io.github.nakamoz.mcopy.metainfo.xml
+          test -f /usr/share/icons/hicolor/scalable/apps/io.github.nakamoz.mcopy.svg
+          appstreamcli validate --no-net \
+            /usr/share/metainfo/io.github.nakamoz.mcopy.metainfo.xml
+          desktop-file-validate \
+            /usr/share/applications/io.github.nakamoz.mcopy.desktop
+
           sudo apt-get remove -y mcopy
           ! command -v mcopy

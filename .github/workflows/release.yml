@@ -116,7 +116,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libfontconfig1-dev libfreetype6-dev \
-            libvulkan-dev libssl-dev pkg-config
+            libvulkan-dev libssl-dev pkg-config \
+            appstream desktop-file-utils
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -167,7 +168,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libfontconfig1-dev libfreetype6-dev \
-            libvulkan-dev libssl-dev pkg-config
+            libvulkan-dev libssl-dev pkg-config \
+            appstream desktop-file-utils
 
       - name: Build (release)
         run: cargo build --release --locked

@@ -36,6 +36,15 @@ pub const APP_PUBLISHER: &str = "NAKAMOZ";
 /// Copyright line for installers, bundles and the Windows version resource.
 pub const APP_COPYRIGHT: &str = "Copyright (c) 2026 Nevzat ÇELİKKANAT";
 
+pub use copy::{
+    CopyController, CopyErrorKind, CopyItem, CopyItemKind, ProgressCallback,
+    ProgressPhase, ProgressUpdate, collect_files, copy_files_with_progress,
+    precreate_directories,
+};
+pub use util::path::{
+    calculate_concurrency, normalize_path, repair_shell_argument,
+};
+
 #[cfg(test)]
 mod identity_tests {
     use super::*;
@@ -66,12 +75,3 @@ mod identity_tests {
         assert_eq!(env!("MCOPY_RESOURCE_COPYRIGHT"), APP_COPYRIGHT);
     }
 }
-
-pub use copy::{
-    CopyController, CopyErrorKind, CopyItem, CopyItemKind, ProgressCallback,
-    ProgressPhase, ProgressUpdate, collect_files, copy_files_with_progress,
-    precreate_directories,
-};
-pub use util::path::{
-    calculate_concurrency, normalize_path, repair_shell_argument,
-};

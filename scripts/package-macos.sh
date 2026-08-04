@@ -16,17 +16,16 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. "$(dirname "$0")/identity.sh"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "error: this script must run on macOS" >&2
   exit 1
 fi
 
-VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-[ -n "$VERSION" ] || { echo "error: could not read package.version from Cargo.toml" >&2; exit 1; }
-
+VERSION="$APP_VERSION"
 APP="dist/mcopy.app"
-IDENTIFIER="com.mcopy.app"
+IDENTIFIER="$APP_ID"
 
 # Build the bundle if it is not already there.
 [ -d "$APP" ] || ./scripts/bundle-macos.sh
@@ -35,6 +34,20 @@ IDENTIFIER="com.mcopy.app"
 # tile, so the progress window could never be restored.
 if /usr/libexec/PlistBuddy -c "Print :LSUIElement" "$APP/Contents/Info.plist" >/dev/null 2>&1; then
   echo "error: Info.plist still sets LSUIElement; the app would have no Dock icon" >&2
+  exit 1
+fi
+
+# The bundle must carry the identity the rest of the packaging assumes,
+# otherwise the .pkg would install over a differently-identified app.
+bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist")"
+if [ "$bundle_id" != "$APP_ID" ]; then
+  echo "error: bundle identifier is '$bundle_id', expected '$APP_ID'" >&2
+  echo "       re-run scripts/bundle-macos.sh to rebuild the bundle" >&2
+  exit 1
+fi
+
+if ! /usr/libexec/PlistBuddy -c "Print :NSHumanReadableCopyright" "$APP/Contents/Info.plist" >/dev/null 2>&1; then
+  echo "error: Info.plist has no NSHumanReadableCopyright; the app would ship unattributed" >&2
   exit 1
 fi
 
@@ -124,3 +137,59 @@ hdiutil create \
   "$DMG" >/dev/null
 
 echo "wrote $DMG"
+
+# ------------------------------------------------------- homebrew cask -------
+
+# Generated next to the disk image it describes, because the cask must carry
+# that exact file's SHA256. A committed cask with a stale hash fails at install
+# time, after the user has already tried.
+DMG_SHA256="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
+CASK="dist/mcopy.rb"
+
+cat > "$CASK" <<CASKFILE
+cask "mcopy" do
+  version "${VERSION}"
+  sha256 "${DMG_SHA256}"
+
+  url "${APP_HOMEPAGE}/releases/download/v#{version}/mcopy-#{version}.dmg",
+      verified: "github.com/NAKAMOZ/mcopy/"
+  name "mcopy"
+  desc "${APP_DESCRIPTION}"
+  homepage "${APP_HOMEPAGE}"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on macos: ">= :catalina"
+
+  app "mcopy.app"
+
+  uninstall quit: "${APP_ID}"
+
+  # Everything mcopy creates outside its own bundle. The Finder Services are
+  # removed by the app itself first, so an uninstall does not leave menu
+  # entries pointing at a deleted binary.
+  uninstall_preflight do
+    system_command "/Applications/mcopy.app/Contents/MacOS/mcopy",
+                   args: ["shell-uninstall"],
+                   must_succeed: false
+  end
+
+  zap trash: [
+    "~/Library/Logs/mcopy",
+    "~/Library/Services/Copy with mcopy.workflow",
+    "~/Library/Services/Paste with mcopy.workflow",
+    "~/Library/Application Support/mcopy",
+    "~/Library/Saved Application State/${APP_ID}.savedState",
+  ]
+end
+CASKFILE
+
+echo "wrote $CASK"
+echo
+echo "Cask ready. Audit it with:"
+echo "  brew audit --cask --new --online $CASK"
+echo "Then submit to homebrew-cask, or host it in a personal tap."
+echo "NOTE: the download URL must resolve, so publish the release first."

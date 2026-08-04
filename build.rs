@@ -114,10 +114,7 @@ END
 
     /// `0.3.0` -> `0,3,0,0`, tolerating pre-release suffixes.
     fn numeric_version(version: &str) -> String {
-        let core = version
-            .split(['-', '+'])
-            .next()
-            .unwrap_or(version);
+        let core = version.split(['-', '+']).next().unwrap_or(version);
 
         let mut parts: Vec<u16> = core
             .split('.')
