@@ -133,4 +133,8 @@ jobs:
             /usr/share/applications/io.github.nakamoz.mcopy.desktop
 
           sudo apt-get remove -y mcopy
+          # Bash cached /usr/bin/mcopy when it was run above. Clear that cache
+          # before asking PATH whether the command still exists.
+          hash -r
+          test ! -e /usr/bin/mcopy
           ! command -v mcopy
