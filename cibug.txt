@@ -1,0 +1,986 @@
+Check (windows-latest)
+
+check formatting
+
+Run cargo fmt --all --check
+  cargo fmt --all --check
+  shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+  env:
+    CARGO_TERM_COLOR: always
+    CARGO_HOME: C:\Users\runneradmin\.cargo
+    CARGO_INCREMENTAL: 0
+    CACHE_ON_FAILURE: false
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\build.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\clipboard\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\clipboard\state.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\copy\controller.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\copy\error.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\copy\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\copy\progress.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\copy\walk.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\lib.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\linux.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\location.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\macos.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\state.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\platform\windows.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\assets.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\install\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\install\state.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\notice.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\progress\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\progress\state.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\shutdown.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\theme.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\ui\widgets.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\util\log.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\util\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\util\out.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\util\path.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\util\shell.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\cli\commands.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\cli\mod.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\src\main.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\tests\paste_lifecycle.rs
+Incorrect newline style in \\?\D:\a\mcopy\mcopy\tests\shell_integration.rs
+Error: Process completed with exit code 1.
+
+
+Check (macos-latest)
+
+Lint
+
+Run cargo clippy --all-targets --locked -- -D warnings
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded anstream v1.0.0
+  Downloaded cgl v0.3.2
+  Downloaded aho-corasick v1.1.5
+  Downloaded bit_field v0.10.3
+  Downloaded cocoa-foundation v0.2.0
+  Downloaded console v0.16.4
+  Downloaded crossbeam-deque v0.8.7
+  Downloaded async-global-executor v2.4.1
+  Downloaded atomic v0.5.3
+  Downloaded cpufeatures v0.3.0
+  Downloaded lebe v0.5.3
+  Downloaded libloading v0.8.9
+  Downloaded async-executor v1.14.0
+  Downloaded bumpalo v3.20.3
+  Downloaded async-channel v1.9.0
+  Downloaded svg_fmt v0.4.5
+  Downloaded adler2 v2.0.1
+  Downloaded loop9 v0.1.5
+  Downloaded blade-util v0.3.0
+  Downloaded byteorder v1.5.0
+  Downloaded anstyle-query v1.1.5
+  Downloaded block-buffer v0.10.4
+  Downloaded lru-slab v0.1.2
+  Downloaded lyon v1.0.19
+  Downloaded maybe-rayon v0.1.1
+  Downloaded new_debug_unreachable v1.0.6
+  Downloaded litemap v0.8.2
+  Downloaded mime v0.3.17
+  Downloaded anstyle-parse v1.0.0
+  Downloaded async-compression v0.4.43
+  Downloaded log v0.4.33
+  Downloaded lyon_geom v1.0.19
+  Downloaded memchr v2.8.3
+  Downloaded mime_guess v2.0.5
+  Downloaded miniz_oxide v0.8.9
+  Downloaded mint v0.5.9
+  Downloaded objc v0.2.7
+  Downloaded objc2-core-foundation v0.3.2
+  Downloaded parking_lot v0.12.5
+  Downloaded toml v0.8.23
+  Downloaded utf8_iter v1.0.4
+  Downloaded zerofrom v0.1.8
+  Downloaded arrayvec v0.7.8
+  Downloaded async-signal v0.2.14
+  Downloaded base64 v0.22.1
+  Downloaded block-buffer v0.12.1
+  Downloaded built v0.8.0
+  Downloaded bytemuck v1.25.2
+  Downloaded clang-sys v1.9.1
+  Downloaded core-foundation-sys v0.8.7
+  Downloaded cpufeatures v0.2.17
+  Downloaded crossbeam-epoch v0.9.20
+  Downloaded icu_properties v2.1.2
+  Downloaded icu_properties_data v2.1.2
+  Downloaded idna v1.1.0
+  Downloaded lazy_static v1.5.0
+  Downloaded libm v0.2.16
+  Downloaded lyon_algorithms v1.0.20
+  Downloaded lyon_path v1.0.19
+  Downloaded lyon_tessellation v1.0.20
+  Downloaded minimal-lexical v0.2.1
+  Downloaded sync_wrapper v1.0.2
+  Downloaded arg_enum_proc_macro v0.3.4
+  Downloaded arrayref v0.3.9
+  Downloaded async-io v2.6.0
+  Downloaded async-net v2.0.0
+  Downloaded autocfg v1.5.1
+  Downloaded avif-serialize v0.8.9
+  Downloaded bit-set v0.8.0
+  Downloaded bitflags v1.3.2
+  Downloaded blade-macros v0.3.0
+  Downloaded block v0.1.6
+  Downloaded block2 v0.6.2
+  Downloaded byteorder-lite v0.1.0
+  Downloaded cfg-if v1.0.4
+  Downloaded clap v4.6.5
+  Downloaded clap_lex v1.1.0
+  Downloaded color_quant v1.1.0
+  Downloaded colorchoice v1.0.5
+  Downloaded const-oid v0.10.2
+  Downloaded convert_case v0.4.0
+  Downloaded core-graphics-types v0.2.0
+  Downloaded core-text v21.0.0
+  Downloaded crypto-common v0.1.7
+  Downloaded icu_provider v2.1.1
+  Downloaded leak v0.1.2
+  Downloaded leaky-cow v0.1.1
+  Downloaded malloc_buf v0.0.6
+  Downloaded memmap2 v0.9.11
+  Downloaded mio v1.2.2
+  Downloaded moxcms v0.7.11
+  Downloaded nom v7.1.3
+  Downloaded num-derive v0.4.2
+  Downloaded num-traits v0.2.19
+  Downloaded objc2-quartz-core v0.3.2
+  Downloaded once_cell v1.21.4
+  Downloaded pin-project-internal v1.1.13
+  Downloaded pollster v0.2.5
+  Downloaded sval_fmt v2.21.1
+  Downloaded take-until v0.2.0
+  Downloaded thiserror-impl v2.0.19
+  Downloaded aligned v0.4.3
+  Downloaded aligned-vec v0.6.4
+  Downloaded anyhow v1.0.104
+  Downloaded as-slice v0.2.1
+  Downloaded async-channel v2.5.0
+  Downloaded async-fs v2.2.0
+  Downloaded async-process v2.5.0
+  Downloaded async-task v4.7.1
+  Downloaded atomic-waker v1.1.2
+  Downloaded av1-grain v0.2.5
+  Downloaded bitflags v2.13.1
+  Downloaded bytemuck_derive v1.11.0
+  Downloaded cexpr v0.6.0
+  Downloaded cfg_aliases v0.2.2
+  Downloaded chacha20 v0.10.1
+  Downloaded clap_derive v4.6.4
+  Downloaded cocoa v0.26.0
+  Downloaded command-fds v0.3.3
+  Downloaded compression-codecs v0.4.38
+  Downloaded compression-core v0.4.32
+  Downloaded concurrent-queue v2.5.0
+  Downloaded core-foundation v0.10.0
+  Downloaded core-graphics-types v0.1.3
+  Downloaded core-video v0.4.3
+  Downloaded crc32fast v1.5.0
+  Downloaded crossbeam-queue v0.3.13
+  Downloaded itoa v1.0.18
+  Downloaded kv-log-macro v1.0.7
+  Downloaded lock_api v0.4.14
+  Downloaded nom v8.0.0
+  Downloaded num-bigint v0.4.8
+  Downloaded num-integer v0.1.46
+  Downloaded num-rational v0.4.2
+  Downloaded objc2 v0.6.4
+  Downloaded objc2-encode v4.1.0
+  Downloaded parking v2.2.1
+  Downloaded pathfinder_simd v0.5.6
+  Downloaded percent-encoding v2.3.2
+  Downloaded sval_buffer v2.21.1
+  Downloaded sval_dynamic v2.21.1
+  Downloaded sval_json v2.21.1
+  Downloaded sval_nested v2.21.1
+  Downloaded sval_ref v2.21.1
+  Downloaded sval_serde v2.21.1
+  Downloaded av-scenechange v0.14.1
+  Downloaded image v0.25.9
+  Downloaded is_terminal_polyfill v1.70.2
+  Downloaded itertools v0.14.0
+  Downloaded naga v25.0.1
+  Downloaded nix v0.31.3
+  Downloaded objc2-metal v0.3.2
+  Downloaded pin-project-lite v0.2.17
+  Downloaded portable-atomic v1.14.0
+  Downloaded unicode-ident v1.0.24
+  Downloaded dirs v6.0.0
+  Downloaded flate2 v1.1.9
+  Downloaded foldhash v0.1.5
+  Downloaded postage v0.5.0
+  Downloaded prettyplease v0.2.37
+  Downloaded proc-macro-error2 v2.0.1
+  Downloaded proc-macro2 v1.0.107
+  Downloaded profiling-procmacros v1.0.18
+  Downloaded psm v0.1.31
+  Downloaded pulp v0.22.3
+  Downloaded svgtypes v0.15.3
+  Downloaded syn v1.0.109
+  Downloaded syn v2.0.119
+  Downloaded quinn-udp v0.5.15
+  Downloaded rand v0.10.2
+  Downloaded ref-cast v1.0.26
+  Downloaded rust-embed-impl v8.12.0
+  Downloaded rust-embed-utils v8.12.0
+  Downloaded rustc-hash v1.1.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded rustc_version v0.4.1
+  Downloaded rustls-native-certs v0.8.4
+  Downloaded rustversion v1.0.23
+  Downloaded libc v0.2.189
+  Downloaded metal v0.29.0
+  Downloaded object v0.37.3
+  Downloaded float-cmp v0.9.0
+  Downloaded float-ord v0.3.2
+  Downloaded fontdb v0.23.0
+  Downloaded proc-macro-error-attr2 v2.0.0
+  Downloaded profiling v1.0.18
+  Downloaded pulp-wasm-simd-flag v0.1.1
+  Downloaded system-configuration v0.6.1
+  Downloaded system-configuration-sys v0.6.0
+  Downloaded tempfile v3.27.0
+  Downloaded termcolor v1.4.1
+  Downloaded tiny-skia v0.11.4
+  Downloaded quote v1.0.47
+  Downloaded rand_core v0.6.4
+  Downloaded rand_core v0.10.1
+  Downloaded rand_pcg v0.10.2
+  Downloaded raw-window-handle v0.6.2
+  Downloaded reborrow v0.5.5
+  Downloaded ref-cast-impl v1.0.26
+  Downloaded resvg v0.45.1
+  Downloaded rgb v0.8.53
+  Downloaded roxmltree v0.20.0
+  Downloaded rustls-pemfile v2.2.0
+  Downloaded rustls-webpki v0.103.13
+  Downloaded simd_helpers v0.1.0
+  Downloaded tokio-macros v2.7.2
+  Downloaded syn v3.0.3
+  Downloaded synstructure v0.13.2
+  Downloaded taffy v0.9.0
+  Downloaded thiserror v1.0.69
+  Downloaded thiserror v2.0.19
+  Downloaded tinystr v0.8.3
+  Downloaded tinyvec v1.12.0
+  Downloaded tokio v1.53.1
+  Downloaded ravif v0.12.0
+  Downloaded rayon v1.12.0
+  Downloaded regex v1.13.1
+  Downloaded ryu v1.0.23
+  Downloaded same-file v1.0.6
+  Downloaded schemars v1.2.2
+  Downloaded serde v1.0.229
+  Downloaded serde_spanned v0.6.9
+  Downloaded serde_urlencoded v0.7.1
+  Downloaded sha1_smol v1.0.1
+  Downloaded sha2 v0.10.9
+  Downloaded sha2 v0.11.0
+  Downloaded shlex v1.3.0
+  Downloaded shlex v2.0.1
+  Downloaded signal-hook-registry v1.4.8
+  Downloaded simd-adler32 v0.3.10
+  Downloaded siphasher v1.0.3
+  Downloaded slab v0.4.12
+  Downloaded slotmap v1.1.1
+  Downloaded smallvec v1.15.2
+  Downloaded socket2 v0.6.5
+  Downloaded tokio-rustls v0.26.4
+  Downloaded v_frame v0.3.9
+  Downloaded value-bag-serde1 v1.13.2
+  Downloaded version_check v0.9.5
+   Compiling icu_normalizer_data v2.1.1
+   Compiling thiserror v1.0.69
+    Checking foreign-types-shared v0.3.1
+    Checking foreign-types v0.5.0
+   Compiling nom v7.1.3
+    Checking half v2.7.1
+    Checking num-bigint v0.4.8
+    Checking icu_collections v2.1.1
+    Checking icu_provider v2.1.1
+    Checking aligned-vec v0.6.4
+    Checking rayon v1.12.0
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+    Checking tracing-core v0.1.36
+   Compiling libloading v0.8.9
+   Compiling generic-array v0.14.7
+    Checking core-foundation v0.9.4
+   Compiling thiserror-impl v1.0.69
+    Checking getrandom v0.2.17
+    Checking bitflags v1.3.2
+   Compiling httparse v1.10.1
+   Compiling serde_json v1.0.151
+   Compiling bindgen v0.71.1
+    Checking untrusted v0.9.0
+   Compiling const-oid v0.10.2
+   Compiling digest v0.11.3
+   Compiling itertools v0.13.0
+    Checking tracing v0.1.44
+    Checking num-rational v0.4.2
+    Checking v_frame v0.3.9
+   Compiling cexpr v0.6.0
+    Checking http-body v1.1.0
+    Checking objc2-foundation v0.3.2
+    Checking tokio-util v0.7.19
+    Checking async-signal v0.2.14
+    Checking async-executor v1.14.0
+    Checking block2 v0.6.2
+   Compiling mime_guess v2.0.5
+   Compiling regex v1.13.1
+    Checking itertools v0.14.0
+    Checking fdeflate v0.3.7
+   Compiling cpufeatures v0.3.0
+   Compiling slotmap v1.1.1
+    Checking euclid v0.22.14
+    Checking as-slice v0.2.1
+   Compiling profiling-procmacros v1.0.18
+   Compiling pin-project-internal v1.1.13
+   Compiling bstr v1.13.0
+    Checking malloc_buf v0.0.6
+    Checking same-file v1.0.6
+   Compiling av-scenechange v0.14.1
+    Checking try-lock v0.2.5
+   Compiling shlex v1.3.0
+    Checking block v0.1.6
+    Checking unicode-width v0.2.2
+   Compiling built v0.8.0
+    Checking fnv v1.0.7
+   Compiling semver v1.0.28
+   Compiling rustls v0.23.43
+   Compiling rav1e v0.8.1
+   Compiling rustc_version v0.4.1
+    Checking h2 v0.4.15
+   Compiling walkdir v2.5.0
+    Checking pin-project v1.1.13
+    Checking want v0.3.1
+    Checking objc v0.2.7
+   Compiling globset v0.4.19
+    Checking profiling v1.0.18
+    Checking aligned v0.4.3
+   Compiling sha2 v0.11.0
+    Checking objc2-metal v0.3.2
+    Checking async-process v2.5.0
+   Compiling ar_archive_writer v0.5.1
+    Checking icu_normalizer v2.1.1
+    Checking icu_properties v2.1.2
+    Checking rustls-webpki v0.103.13
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+    Checking core-graphics-types v0.2.0
+   Compiling nix v0.31.3
+   Compiling pulp v0.22.3
+    Checking security-framework-sys v2.17.0
+   Compiling arg_enum_proc_macro v0.3.4
+    Checking core_maths v0.1.1
+    Checking nom v8.0.0
+    Checking no_std_io2 v0.9.4
+   Compiling syn v1.0.109
+    Checking tower-service v0.3.3
+    Checking deflate64 v0.1.12
+   Compiling ref-cast v1.0.26
+    Checking compression-core v0.4.32
+    Checking y4m v0.8.0
+   Compiling pastey v0.1.1
+   Compiling mime v0.3.17
+   Compiling rustix v0.38.44
+    Checking ryu v1.0.23
+   Compiling toml_write v0.1.2
+    Checking percent-encoding v2.3.2
+    Checking subtle v2.6.1
+    Checking float-cmp v0.9.0
+    Checking quick-error v2.0.1
+   Compiling winnow v0.7.15
+    Checking option-ext v0.2.0
+   Compiling system-configuration-sys v0.6.0
+    Checking av1-grain v0.2.5
+    Checking strict-num v0.1.1
+    Checking form_urlencoded v1.2.2
+   Compiling toml_edit v0.22.27
+    Checking compression-codecs v0.4.38
+    Checking bitstream-io v4.10.0
+    Checking ttf-parser v0.25.1
+    Checking security-framework v3.7.0
+    Checking hyper v1.11.0
+    Checking objc2-quartz-core v0.3.2
+    Checking idna_adapter v1.2.1
+   Compiling psm v0.1.31
+   Compiling rust-embed-utils v8.12.0
+   Compiling pathfinder_simd v0.5.6
+    Checking lyon_geom v1.0.19
+    Checking maybe-rayon v0.1.1
+    Checking objc2-core-graphics v0.3.2
+    Checking futures-executor v0.3.33
+    Checking rgb v0.8.53
+    Checking num-complex v0.4.6
+   Compiling nix v0.29.0
+   Compiling naga v25.0.1
+   Compiling num-derive v0.4.2
+   Compiling ref-cast-impl v1.0.26
+   Compiling serde_derive_internals v0.30.0
+   Compiling simd_helpers v0.1.0
+   Compiling noop_proc_macro v0.3.0
+   Compiling bit-vec v0.8.0
+    Checking foldhash v0.1.5
+    Checking pulp-wasm-simd-flag v0.1.1
+    Checking zune-core v0.4.12
+    Checking reborrow v0.5.5
+    Checking event-listener v2.5.3
+    Checking base64 v0.22.1
+    Checking imgref v1.12.2
+    Checking utf8_iter v1.0.4
+    Checking leak v0.1.2
+   Compiling cbindgen v0.28.0
+    Checking new_debug_unreachable v1.0.6
+    Checking weezl v0.1.12
+    Checking termcolor v1.4.1
+    Checking tinyvec_macros v0.1.1
+    Checking arrayref v0.3.9
+   Compiling serde_json_lenient v0.2.4
+   Compiling codespan-reporting v0.12.0
+    Checking tiny-skia-path v0.11.4
+    Checking tinyvec v1.12.0
+    Checking idna v1.1.0
+    Checking leaky-cow v0.1.1
+    Checking loop9 v0.1.5
+   Compiling tempfile v3.27.0
+   Compiling hashbrown v0.15.5
+    Checking bit-set v0.8.0
+    Checking async-channel v1.9.0
+   Compiling schemars_derive v1.2.2
+    Checking zune-jpeg v0.4.21
+    Checking objc2-app-kit v0.3.2
+    Checking futures v0.3.33
+    Checking lyon_path v1.0.19
+   Compiling rust-embed-impl v8.12.0
+    Checking hyper-util v0.1.20
+    Checking rustls-native-certs v0.8.4
+   Compiling toml v0.8.23
+    Checking tokio-rustls v0.26.4
+    Checking async-compression v0.4.43
+    Checking core-graphics v0.24.0
+    Checking block-buffer v0.10.4
+    Checking crypto-common v0.1.7
+    Checking async-global-executor v2.4.1
+    Checking core-graphics-types v0.1.3
+    Checking async-fs v2.2.0
+    Checking strum v0.26.3
+    Checking async-net v2.0.0
+   Compiling stacker v0.1.25
+    Checking zune-inflate v0.2.54
+    Checking kurbo v0.11.3
+    Checking avif-serialize v0.8.9
+    Checking kv-log-macro v1.0.7
+    Checking sync_wrapper v1.0.2
+   Compiling proc-macro-error-attr2 v2.0.0
+    Checking cgl v0.3.2
+    Checking dirs-sys v0.3.7
+    Checking memmap2 v0.9.11
+    Checking pin-utils v0.1.0
+    Checking bit_field v0.10.3
+    Checking siphasher v1.0.3
+    Checking color_quant v1.1.0
+    Checking fax v0.2.7
+    Checking unicode-script v0.5.8
+    Checking unicode-ccc v0.4.0
+    Checking home v0.5.11
+    Checking unicode-properties v0.1.4
+   Compiling heck v0.4.1
+    Checking dyn-clone v1.0.20
+    Checking hexf-parse v0.2.1
+    Checking waker-fn v1.2.0
+    Checking pxfm v0.1.30
+    Checking utf8parse v0.2.2
+    Checking lebe v0.5.3
+    Checking unicode-bidi-mirroring v0.4.0
+   Compiling rustc-hash v1.1.0
+    Checking zune-core v0.5.1
+    Checking byteorder-lite v0.1.0
+    Checking fastrand v1.9.0
+    Checking tower-layer v0.3.3
+   Compiling dtor-proc-macro v0.0.5
+    Checking tower v0.5.3
+    Checking dtor v0.0.6
+    Checking futures-lite v1.13.0
+    Checking image-webp v0.2.4
+    Checking moxcms v0.7.11
+    Checking zune-jpeg v0.5.15
+   Compiling hidden-trait v0.1.2
+    Checking rustybuzz v0.20.1
+    Checking exr v1.74.2
+    Checking gpui_collections v0.2.2
+    Checking anstyle-parse v1.0.0
+    Checking schemars v1.2.2
+    Checking which v6.0.3
+    Checking tiff v0.10.3
+    Checking gif v0.14.2
+    Checking svgtypes v0.15.3
+    Checking fontdb v0.23.0
+    Checking async-std v1.13.2
+   Compiling proc-macro-error2 v2.0.1
+    Checking dirs v4.0.0
+    Checking io-surface v0.16.1
+    Checking ravif v0.12.0
+    Checking smol v2.0.2
+    Checking metal v0.29.0
+    Checking digest v0.10.7
+    Checking system-configuration v0.6.1
+    Checking async_zip v0.0.17
+    Checking hyper-rustls v0.27.9
+    Checking rust-embed v8.12.0
+    Checking command-fds v0.3.3
+    Checking url v2.5.8
+    Checking serde_urlencoded v0.7.1
+    Checking dirs-sys v0.4.1
+   Compiling gpui_media v0.2.2
+    Checking core-graphics2 v0.4.1
+    Checking png v0.18.1
+    Checking png v0.17.16
+    Checking http-body-util v0.1.4
+    Checking tokio-socks v0.5.3
+    Checking rustls-pemfile v2.2.0
+    Checking qoi v0.4.1
+    Checking simplecss v0.2.2
+    Checking xattr v0.2.3
+    Checking cpufeatures v0.2.17
+    Checking filetime v0.2.29
+    Checking encoding_rs v0.8.35
+    Checking raw-window-handle v0.6.2
+    Checking unicode-bidi v0.3.18
+    Checking float_next_after v1.0.0
+    Checking ipnet v2.12.1
+    Checking xmlwriter v0.1.0
+    Checking anstyle-query v1.1.5
+   Compiling portable-atomic v1.14.0
+    Checking dunce v1.0.5
+    Checking roxmltree v0.20.0
+    Checking take-until v0.2.0
+   Compiling ctor-proc-macro v0.0.6
+    Checking is_terminal_polyfill v1.70.2
+    Checking unicode-vo v0.1.0
+   Compiling zed-font-kit v0.14.1-zed
+    Checking mint v0.5.9
+    Checking pico-args v0.5.0
+    Checking imagesize v0.13.0
+    Checking anstyle v1.0.14
+   Compiling convert_case v0.4.0
+    Checking data-url v0.3.2
+    Checking colorchoice v1.0.5
+    Checking anstream v1.0.0
+    Checking usvg v0.45.1
+    Checking blade-graphics v0.7.1
+   Compiling derive_more v0.99.20
+    Checking gpui_util v0.2.2
+    Checking ctor v0.4.3
+    Checking zed-reqwest v0.12.15-zed
+    Checking lyon_tessellation v1.0.20
+    Checking zed-async-tar v0.5.0-zed
+    Checking sha2 v0.10.9
+    Checking image v0.25.9
+   Compiling gpui_perf v0.2.2
+    Checking tiny-skia v0.11.4
+    Checking core-video v0.4.3
+    Checking dirs v5.0.1
+    Checking pathfinder_geometry v0.5.1
+   Compiling gpui v0.2.2
+   Compiling stacksafe-macro v0.1.4
+    Checking core-text v21.0.0
+    Checking lyon_algorithms v1.0.20
+    Checking cocoa-foundation v0.2.0
+   Compiling strum_macros v0.27.2
+   Compiling gpui_derive_refineable v0.2.2
+    Checking crossbeam-queue v0.3.13
+    Checking lazy_static v1.5.0
+    Checking byteorder v1.5.0
+    Checking atomic v0.5.3
+    Checking clap_lex v1.1.0
+    Checking strsim v0.11.1
+    Checking svg_fmt v0.4.5
+    Checking grid v0.18.0
+    Checking pollster v0.2.5
+    Checking float-ord v0.3.2
+    Checking sha1_smol v1.0.1
+    Checking static_assertions v1.1.0
+    Checking postage v0.5.0
+    Checking uuid v1.24.0
+    Checking strum v0.27.2
+    Checking taffy v0.9.0
+    Checking etagere v0.2.15
+    Checking clap_builder v4.6.5
+    Checking gpui_refineable v0.2.2
+    Checking cocoa v0.26.0
+    Checking lyon v1.0.19
+    Checking stacksafe v0.1.4
+    Checking resvg v0.45.1
+   Compiling gpui_util_macros v0.2.2
+    Checking gpui_http_client v0.2.2
+    Checking blade-util v0.3.0
+    Checking dirs-sys v0.5.0
+    Checking console v0.16.4
+    Checking gpui_sum_tree v0.2.2
+    Checking gpui_semantic_version v0.2.2
+   Compiling clap_derive v4.6.4
+   Compiling gpui-macros v0.2.2
+   Compiling blade-macros v0.3.0
+    Checking num_cpus v1.17.0
+    Checking unit-prefix v0.5.2
+    Checking seahash v4.1.0
+   Compiling mcopy v0.3.0 (/Users/runner/work/mcopy/mcopy)
+    Checking inventory v0.3.24
+    Checking indicatif v0.18.6
+    Checking clap v4.6.5
+    Checking dirs v6.0.0
+    Checking arboard v3.6.1
+error: unused import: `escape_xml`
+  --> src/platform/macos.rs:16:26
+   |
+16 | use crate::util::shell::{escape_xml, quote_posix};
+   |                          ^^^^^^^^^^
+   |
+   = note: `-D unused-imports` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unused_imports)]`
+
+error[E0425]: cannot find function `xml_escape` in this scope
+   --> src/platform/macos.rs:185:24
+    |
+185 |     let escaped_name = xml_escape(name);
+    |                        ^^^^^^^^^^
+    |
+   ::: src/util/shell.rs:20:1
+    |
+ 20 | pub fn escape_xml(value: &str) -> String {
+    | ---------------------------------------- similarly named function `escape_xml` defined here
+    |
+help: a function with a similar name exists
+    |
+185 -     let escaped_name = xml_escape(name);
+185 +     let escaped_name = escape_xml(name);
+    |
+
+error[E0425]: cannot find function `xml_escape` in this scope
+   --> src/platform/macos.rs:231:26
+    |
+231 |     let command_string = xml_escape(&command_string);
+    |                          ^^^^^^^^^^
+    |
+   ::: src/util/shell.rs:20:1
+    |
+ 20 | pub fn escape_xml(value: &str) -> String {
+    | ---------------------------------------- similarly named function `escape_xml` defined here
+    |
+help: a function with a similar name exists
+    |
+231 -     let command_string = xml_escape(&command_string);
+231 +     let command_string = escape_xml(&command_string);
+    |
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `mcopy` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mcopy` (lib test) due to 2 previous errors
+Error: Process completed with exit code 101.
+
+
+packaging (macos-latest)
+
+Build (release)
+
+Run cargo build --release --locked
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded crypto-common v0.1.7
+  Downloaded imagesize v0.13.0
+  Downloaded anstyle-query v1.1.5
+  Downloaded aligned-vec v0.6.4
+  Downloaded adler2 v2.0.1
+  Downloaded imgref v1.12.2
+  Downloaded loop9 v0.1.5
+  Downloaded is_terminal_polyfill v1.70.2
+  Downloaded leak v0.1.2
+  Downloaded noop_proc_macro v0.3.0
+  Downloaded num-derive v0.4.2
+  Downloaded io-surface v0.16.1
+  Downloaded lru-slab v0.1.2
+  Downloaded lyon_algorithms v1.0.20
+  Downloaded num-rational v0.4.2
+  Downloaded objc v0.2.7
+  Downloaded pathfinder_simd v0.5.6
+  Downloaded pin-utils v0.1.0
+  Downloaded as-slice v0.2.1
+  Downloaded avif-serialize v0.8.9
+  Downloaded bitflags v1.3.2
+  Downloaded byteorder-lite v0.1.0
+  Downloaded clap_builder v4.6.5
+  Downloaded color_quant v1.1.0
+  Downloaded compression-codecs v0.4.38
+  Downloaded core-foundation v0.9.4
+  Downloaded core-graphics v0.24.0
+  Downloaded core-graphics-types v0.2.0
+  Downloaded cpufeatures v0.3.0
+  Downloaded icu_properties v2.1.2
+  Downloaded icu_provider v2.1.1
+  Downloaded inventory v0.3.24
+  Downloaded ipnet v2.12.1
+  Downloaded mime_guess v2.0.5
+  Downloaded miniz_oxide v0.8.9
+  Downloaded mio v1.2.2
+  Downloaded num-integer v0.1.46
+  Downloaded pin-project v1.1.13
+  Downloaded thiserror-impl v1.0.69
+   Compiling shlex v1.3.0
+   Compiling semver v1.0.28
+   Compiling try-lock v0.2.5
+   Compiling block v0.1.6
+   Compiling built v0.8.0
+   Compiling rustls v0.23.43
+   Compiling fnv v1.0.7
+   Compiling unicode-width v0.2.2
+   Compiling av-scenechange v0.14.1
+   Compiling rav1e v0.8.1
+   Compiling walkdir v2.5.0
+   Compiling h2 v0.4.15
+   Compiling pin-project v1.1.13
+   Compiling rustc_version v0.4.1
+   Compiling want v0.3.1
+   Compiling objc v0.2.7
+   Compiling profiling v1.0.18
+   Compiling globset v0.4.19
+   Compiling aligned v0.4.3
+   Compiling sha2 v0.11.0
+   Compiling objc2-metal v0.3.2
+   Compiling async-process v2.5.0
+   Compiling ar_archive_writer v0.5.1
+   Compiling icu_normalizer v2.1.1
+   Compiling icu_properties v2.1.2
+   Compiling rustls-webpki v0.103.13
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling core-graphics-types v0.2.0
+   Compiling nix v0.31.3
+   Compiling pulp v0.22.3
+   Compiling security-framework-sys v2.17.0
+   Compiling core_maths v0.1.1
+   Compiling arg_enum_proc_macro v0.3.4
+   Compiling nom v8.0.0
+   Compiling no_std_io2 v0.9.4
+   Compiling compression-core v0.4.32
+   Compiling quick-error v2.0.1
+   Compiling percent-encoding v2.3.2
+   Compiling subtle v2.6.1
+   Compiling toml_write v0.1.2
+   Compiling mime v0.3.17
+   Compiling ryu v1.0.23
+   Compiling deflate64 v0.1.12
+   Compiling pastey v0.1.1
+   Compiling rustix v0.38.44
+   Compiling tower-service v0.3.3
+   Compiling system-configuration-sys v0.6.0
+   Compiling option-ext v0.2.0
+   Compiling float-cmp v0.9.0
+   Compiling y4m v0.8.0
+   Compiling ref-cast v1.0.26
+   Compiling syn v1.0.109
+   Compiling winnow v0.7.15
+   Compiling av1-grain v0.2.5
+   Compiling strict-num v0.1.1
+   Compiling toml_edit v0.22.27
+   Compiling compression-codecs v0.4.38
+   Compiling form_urlencoded v1.2.2
+   Compiling bitstream-io v4.10.0
+   Compiling security-framework v3.7.0
+   Compiling ttf-parser v0.25.1
+   Compiling hyper v1.11.0
+   Compiling idna_adapter v1.2.1
+   Compiling objc2-quartz-core v0.3.2
+   Compiling psm v0.1.31
+   Compiling rust-embed-utils v8.12.0
+   Compiling pathfinder_simd v0.5.6
+   Compiling lyon_geom v1.0.19
+   Compiling maybe-rayon v0.1.1
+   Compiling objc2-core-graphics v0.3.2
+   Compiling futures-executor v0.3.33
+   Compiling num-complex v0.4.6
+   Compiling rgb v0.8.53
+   Compiling naga v25.0.1
+   Compiling nix v0.29.0
+   Compiling num-derive v0.4.2
+   Compiling ref-cast-impl v1.0.26
+   Compiling serde_derive_internals v0.30.0
+   Compiling simd_helpers v0.1.0
+   Compiling arrayref v0.3.9
+   Compiling weezl v0.1.12
+   Compiling tinyvec_macros v0.1.1
+   Compiling cbindgen v0.28.0
+   Compiling reborrow v0.5.5
+   Compiling noop_proc_macro v0.3.0
+   Compiling serde_json_lenient v0.2.4
+   Compiling new_debug_unreachable v1.0.6
+   Compiling event-listener v2.5.3
+   Compiling base64 v0.22.1
+   Compiling leak v0.1.2
+   Compiling foldhash v0.1.5
+   Compiling bit-vec v0.8.0
+   Compiling termcolor v1.4.1
+   Compiling pulp-wasm-simd-flag v0.1.1
+   Compiling imgref v1.12.2
+   Compiling utf8_iter v1.0.4
+   Compiling zune-core v0.4.12
+   Compiling hashbrown v0.15.5
+   Compiling zune-jpeg v0.4.21
+   Compiling tempfile v3.27.0
+   Compiling loop9 v0.1.5
+   Compiling idna v1.1.0
+   Compiling bit-set v0.8.0
+   Compiling codespan-reporting v0.12.0
+   Compiling leaky-cow v0.1.1
+   Compiling async-channel v1.9.0
+   Compiling tinyvec v1.12.0
+   Compiling schemars_derive v1.2.2
+   Compiling tiny-skia-path v0.11.4
+   Compiling futures v0.3.33
+   Compiling objc2-app-kit v0.3.2
+   Compiling lyon_path v1.0.19
+   Compiling rust-embed-impl v8.12.0
+   Compiling hyper-util v0.1.20
+   Compiling rustls-native-certs v0.8.4
+   Compiling tokio-rustls v0.26.4
+   Compiling toml v0.8.23
+   Compiling async-compression v0.4.43
+   Compiling core-graphics v0.24.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling async-global-executor v2.4.1
+   Compiling core-graphics-types v0.1.3
+   Compiling async-fs v2.2.0
+   Compiling strum v0.26.3
+   Compiling async-net v2.0.0
+   Compiling stacker v0.1.25
+   Compiling zune-inflate v0.2.54
+   Compiling kurbo v0.11.3
+   Compiling avif-serialize v0.8.9
+   Compiling kv-log-macro v1.0.7
+   Compiling sync_wrapper v1.0.2
+   Compiling proc-macro-error-attr2 v2.0.0
+   Compiling memmap2 v0.9.11
+   Compiling cgl v0.3.2
+   Compiling dirs-sys v0.3.7
+   Compiling fastrand v1.9.0
+   Compiling color_quant v1.1.0
+   Compiling unicode-properties v0.1.4
+   Compiling fax v0.2.7
+   Compiling heck v0.4.1
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling lebe v0.5.3
+   Compiling zune-core v0.5.1
+   Compiling bit_field v0.10.3
+   Compiling unicode-ccc v0.4.0
+   Compiling unicode-script v0.5.8
+   Compiling home v0.5.11
+   Compiling byteorder-lite v0.1.0
+   Compiling pxfm v0.1.30
+   Compiling siphasher v1.0.3
+   Compiling pin-utils v0.1.0
+   Compiling utf8parse v0.2.2
+   Compiling waker-fn v1.2.0
+   Compiling dtor-proc-macro v0.0.5
+   Compiling rustc-hash v1.1.0
+   Compiling hexf-parse v0.2.1
+   Compiling tower-layer v0.3.3
+   Compiling dyn-clone v1.0.20
+   Compiling tower v0.5.3
+   Compiling schemars v1.2.2
+   Compiling moxcms v0.7.11
+   Compiling dtor v0.0.6
+   Compiling gpui_collections v0.2.2
+   Compiling futures-lite v1.13.0
+   Compiling anstyle-parse v1.0.0
+   Compiling async-std v1.13.2
+   Compiling svgtypes v0.15.3
+   Compiling image-webp v0.2.4
+   Compiling rustybuzz v0.20.1
+   Compiling which v6.0.3
+   Compiling zune-jpeg v0.5.15
+   Compiling exr v1.74.2
+   Compiling tiff v0.10.3
+   Compiling gif v0.14.2
+   Compiling dirs v4.0.0
+   Compiling io-surface v0.16.1
+   Compiling proc-macro-error2 v2.0.1
+   Compiling fontdb v0.23.0
+   Compiling ravif v0.12.0
+   Compiling smol v2.0.2
+   Compiling hidden-trait v0.1.2
+   Compiling metal v0.29.0
+   Compiling digest v0.10.7
+   Compiling async_zip v0.0.17
+   Compiling system-configuration v0.6.1
+   Compiling hyper-rustls v0.27.9
+   Compiling rust-embed v8.12.0
+   Compiling command-fds v0.3.3
+   Compiling url v2.5.8
+   Compiling serde_urlencoded v0.7.1
+   Compiling dirs-sys v0.4.1
+   Compiling gpui_media v0.2.2
+   Compiling core-graphics2 v0.4.1
+   Compiling png v0.17.16
+   Compiling png v0.18.1
+   Compiling http-body-util v0.1.4
+   Compiling tokio-socks v0.5.3
+   Compiling rustls-pemfile v2.2.0
+error[E0425]: cannot find function `xml_escape` in this scope
+   --> src/platform/macos.rs:185:24
+    |
+185 |     let escaped_name = xml_escape(name);
+    |                        ^^^^^^^^^^
+    |
+   ::: src/util/shell.rs:20:1
+    |
+ 20 | pub fn escape_xml(value: &str) -> String {
+    | ---------------------------------------- similarly named function `escape_xml` defined here
+    |
+help: a function with a similar name exists
+    |
+185 -     let escaped_name = xml_escape(name);
+185 +     let escaped_name = escape_xml(name);
+    |
+
+error[E0425]: cannot find function `xml_escape` in this scope
+   --> src/platform/macos.rs:231:26
+    |
+231 |     let command_string = xml_escape(&command_string);
+    |                          ^^^^^^^^^^
+    |
+   ::: src/util/shell.rs:20:1
+    |
+ 20 | pub fn escape_xml(value: &str) -> String {
+    | ---------------------------------------- similarly named function `escape_xml` defined here
+    |
+help: a function with a similar name exists
+    |
+231 -     let command_string = xml_escape(&command_string);
+231 +     let command_string = escape_xml(&command_string);
+    |
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `mcopy` (lib) generated 1 warning
+error: could not compile `mcopy` (lib) due to 2 previous errors; 1 warning emitted
+warning: build failed, waiting for other jobs to finish...
+Error: Process completed with exit code 101.
+
+
+packaging (ubuntu-latest)
+
+Package linux
+
+Run ./scripts/package-linux.sh
+/home/runner/work/_temp/be51bdc9-c359-48f9-8061-32f3ae3e0683.sh: line 1: ./scripts/package-linux.sh: Permission denied
+Error: Process completed with exit code 126.
+
+
+check (ubuntu-latest)
+

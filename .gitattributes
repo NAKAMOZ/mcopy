@@ -1,0 +1,48 @@
+# Line-ending policy.
+#
+# Without this file, Git on Windows checks source out with CRLF (core.autocrlf
+# defaults to true there), while .rustfmt.toml pins `newline_style = "Unix"`.
+# `cargo fmt --check` then fails on every file on a Windows runner even though
+# the repository content is correct. Pinning LF makes every checkout identical
+# on every platform.
+#
+# LF also matters for the shell scripts: a CRLF `#!/usr/bin/env bash` line makes
+# the kernel look for an interpreter named "bash\r", which fails with a
+# confusing "bad interpreter" error.
+
+# Normalize everything text-like to LF in the index and on checkout.
+* text=auto eol=lf
+
+# Explicit for the file types that must not vary.
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.xml       text eol=lf
+*.desktop   text eol=lf
+*.json      text eol=lf
+*.rb        text eol=lf
+
+# PowerShell and Inno Setup are Windows-only, but LF keeps the tree uniform and
+# both tools read it correctly. The .iss additionally carries a UTF-8 BOM, which
+# Git preserves because the file is still detected as text.
+*.ps1       text eol=lf
+*.iss       text eol=lf
+
+# Never touched: normalization would corrupt these.
+*.ico       binary
+*.icns      binary
+*.ttf       binary
+*.png       binary
+*.jpg       binary
+*.gz        binary
+*.zip       binary
+*.dmg       binary
+*.pkg       binary
+*.deb       binary
+*.exe       binary
+
+# Keep generated and vendored files out of language statistics and diffs.
+Cargo.lock  linguist-generated=true -diff

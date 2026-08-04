@@ -182,7 +182,7 @@ fn create_automator_workflow(
 
     fs::create_dir_all(&resources_dir)?;
 
-    let escaped_name = xml_escape(name);
+    let escaped_name = escape_xml(name);
     // Each Service bundle needs its own identifier, scoped under the app's.
     let bundle_identifier = format!("{}.service.{}", crate::APP_ID, action);
 
@@ -228,7 +228,7 @@ fn create_automator_workflow(
     fs::write(contents_dir.join("Info.plist"), info_plist)?;
 
     let command_string = workflow_command(exe_path, action)?;
-    let command_string = xml_escape(&command_string);
+    let command_string = escape_xml(&command_string);
 
     // document.wflow - Shell script action
     let wflow = format!(

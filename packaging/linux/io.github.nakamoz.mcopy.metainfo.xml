@@ -8,7 +8,9 @@
   "installed application with no owner" problem this file exists to fix.
 
   Copyright 2026 Nevzat ÇELİKKANAT
-  Validate with:  appstreamcli validate --pedantic <this file>
+
+  Validated in CI by scripts/package-linux.sh; run "appstreamcli validate"
+  against this file to check it by hand.
 -->
 <component type="desktop-application">
   <id>io.github.nakamoz.mcopy</id>
