@@ -359,6 +359,18 @@ target, so `cargo check --target x86_64-pc-windows-msvc` wants MSVC's `lib.exe`
 and the Apple target wants an osxcross toolchain — a rustup target alone is not
 enough. Treat a green preflight as "the Linux job will pass", nothing more.
 
+For the packaging job in a clean environment, or a build history to look back
+at, there is a local Jenkins in [ci/jenkins/](ci/jenkins/):
+
+```bash
+./ci/jenkins/jenkinsctl.sh up       # first time
+./ci/jenkins/jenkinsctl.sh build
+```
+
+It runs the same stages against a fresh checkout, in ~40 seconds once its cache
+is warm. It builds what is *committed*, and — like preflight — it is Linux
+only.
+
 To run the workflow files themselves, use [act](https://github.com/nektos/act),
 which executes GitHub Actions in Docker:
 
@@ -369,7 +381,7 @@ act -j check -P ubuntu-latest=catthehacker/ubuntu:act-latest
 Worth it when you have edited a workflow and want to know the YAML is right.
 Not worth it as a routine pre-push check: act only emulates the Linux runners,
 gets no `Swatinem/rust-cache`, and reinstalls the apt build dependencies and
-recompiles gpui from scratch each run — minutes, against preflight's seconds.
+recompiles gpui from scratch each run.
 
 Packaging:
 

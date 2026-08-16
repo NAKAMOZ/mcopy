@@ -38,7 +38,7 @@ require_docker() {
 # Jenkins ties the CSRF crumb to the session that asked for it, so the cookie
 # jar has to be carried from the crumb request into the POST.
 post() {
-    local path="$1"
+    local path="$1"; shift   # the rest are extra curl arguments, not URLs
     rm -f "$COOKIES"
     local crumb
     crumb="$(curl -sg -c "$COOKIES" --user "$AUTH" \

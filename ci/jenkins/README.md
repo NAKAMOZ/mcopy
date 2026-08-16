@@ -18,97 +18,93 @@ back at.
 
 | File | Purpose |
 | --- | --- |
+| `jenkinsctl.sh` | Start it, run builds, read results — the only entry point you need |
 | `Dockerfile.ci` | Build agent: Rust plus everything gpui links against |
 | `Dockerfile.jenkins` | Jenkins plus a docker CLI, plugins preinstalled, no setup wizard |
 | `jenkins.yaml` | The entire Jenkins configuration (JCasC) |
+| `job-config.xml` | The job definition |
 | `plugins.txt` | Plugins baked into the image |
 | `../../Jenkinsfile` | The pipeline itself |
 
 Nothing is configured by clicking. Delete the container and rebuild it and you
 get the same instance back.
 
-## One-time setup
+## Using it
 
-You need to be in the `docker` group:
+You need to be in the `docker` group first:
 
 ```bash
 sudo usermod -aG docker $USER      # then log out and back in
 docker info                        # must succeed without sudo
 ```
 
-Build both images:
+Everything else goes through one script:
 
 ```bash
-cd ci/jenkins
-docker build -t mcopy-ci:latest      -f Dockerfile.ci      .
-docker build -t mcopy-jenkins:latest -f Dockerfile.jenkins .
+./ci/jenkins/jenkinsctl.sh up       # build images, start Jenkins, create the job
+./ci/jenkins/jenkinsctl.sh build    # trigger a build, wait, print the verdict
+./ci/jenkins/jenkinsctl.sh status   # last build's result
+./ci/jenkins/jenkinsctl.sh log      # last build's console output
+./ci/jenkins/jenkinsctl.sh down     # stop
+./ci/jenkins/jenkinsctl.sh clean    # stop and forget history and build cache
 ```
 
-## Starting it
+`up` is idempotent — run it again after editing a `Dockerfile` and it rebuilds
+and restarts without losing the job.
 
-```bash
-JH=$HOME/jenkins-mcopy/jenkins_home
-mkdir -p "$JH"
-docker run -d --name jenkins \
-  -p 127.0.0.1:8080:8080 \
-  -v "$JH:$JH" -e JENKINS_HOME="$JH" \
-  -e JENKINS_ADMIN_PASSWORD=admin \
-  -v "$PWD/../..:/repo:ro" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  mcopy-jenkins:latest
-```
+Or use the web UI at <http://127.0.0.1:8080> (`admin` / `admin`) and press
+**Build Now**.
 
-Then open <http://127.0.0.1:8080> and log in as `admin` / `admin`.
+### The one rule
 
-Two details in that command are load-bearing:
+The job builds what is **committed** on your branch. It clones from the
+bind-mounted repository, so unpushed commits are fine — uncommitted changes are
+invisible. Commit first, then build.
+
+### How long it takes
+
+Measured on this repository:
+
+| | Time |
+| --- | --- |
+| First build (cold cache) | ~6 minutes |
+| Later builds | ~40 seconds |
+
+The difference is `mcopy-target` and `mcopy-cargo-registry`, two named volumes
+holding `CARGO_TARGET_DIR` and cargo's registry. They outlive the workspace,
+which Jenkins wipes between builds. `clean` deletes them, so the next build is
+a cold one again.
+
+For comparison: `scripts/preflight.sh` covers the same ground minus packaging
+in about three seconds, because it reuses the `target/` you already have.
+
+## Why the container is started the way it is
+
+Three flags in `jenkinsctl.sh` are load-bearing, and each one cost a failed
+build to discover:
 
 - **`JENKINS_HOME` is bind-mounted at the same path inside and outside the
-  container.** The pipeline runs its build in a *sibling* container started
-  through the mounted docker socket, and the daemon resolves the workspace
-  mount against host paths. If the path differed, the build container would
-  come up with an empty workspace.
-- **The port is bound to `127.0.0.1`, not `0.0.0.0`.** Jenkins can run
-  arbitrary code by design; this one should not be reachable from the network.
+  container.** The build runs in a *sibling* container started through the
+  mounted docker socket, and the daemon resolves that container's workspace
+  mount against host paths. A different path inside would give the build an
+  empty workspace.
+- **The port is bound to `127.0.0.1`, not `0.0.0.0`.** Jenkins runs arbitrary
+  code by design and should not be reachable from the network.
+- **`ALLOW_LOCAL_CHECKOUT` is enabled** (in `Dockerfile.jenkins`). The git
+  plugin refuses to clone from a local directory by default, because on a
+  shared Jenkins that would let any job read arbitrary host paths. Here the
+  local clone is the entire point, the repository is mounted read-only, and the
+  instance is single-user on localhost.
 
-## Running a build
+Two more things the agent image has to provide, for the same reason:
 
-The job builds whatever is **committed** on `main` in your working copy — it
-clones from the bind-mounted repository, so unpushed commits are fine, but
-uncommitted changes are not seen. Commit first, then build.
-
-From the UI: open **mcopy-ci** and press **Build Now**.
-
-From the terminal:
-
-```bash
-# Trigger
-crumb=$(curl -s --user admin:admin \
-  'http://127.0.0.1:8080/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,":",//crumb)')
-curl -s -X POST --user admin:admin -H "$crumb" \
-  http://127.0.0.1:8080/job/mcopy-ci/build
-
-# Watch the log of the newest build
-curl -s --user admin:admin \
-  http://127.0.0.1:8080/job/mcopy-ci/lastBuild/consoleText
-
-# Just the verdict
-curl -s --user admin:admin \
-  'http://127.0.0.1:8080/job/mcopy-ci/lastBuild/api/json?tree=number,result,building'
-```
-
-The first build compiles gpui from scratch and takes a while. Later builds
-reuse it: `CARGO_TARGET_DIR` and cargo's registry live in named volumes
-(`mcopy-target`, `mcopy-cargo-registry`) that outlive the workspace.
-
-## Stopping and cleaning up
-
-```bash
-docker stop jenkins                     # keeps history
-docker rm -f jenkins                    # removes the container, keeps $JH
-rm -rf ~/jenkins-mcopy/jenkins_home     # forget everything
-docker volume rm mcopy-target mcopy-cargo-registry   # drop the build cache
-```
+- The cargo cache directories must **exist and be writable in the image**.
+  Docker seeds a named volume from the image, ownership included, and only
+  ever does so once — so a directory created later comes up owned by root and
+  cargo cannot write to its own registry.
+- The agent runs as a uid with no passwd entry, so it needs a **`HOME` that
+  exists**: the shell-integration tests register menu entries under the user's
+  own directories, which is precisely what they assert.
 
 ## When something breaks
 
