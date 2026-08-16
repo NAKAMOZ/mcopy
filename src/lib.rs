@@ -6,6 +6,7 @@
 //! - [`platform`] — OS integration behind the `ContextMenu` trait, plus
 //!   install-location classification.
 //! - [`ui`] — GPUI windows, with state separated from view.
+//! - [`update`] — the GitHub release check and per-OS installer handoff.
 //! - [`util`] — leaf helpers (path normalization, shell escaping, logging).
 //!
 //! The re-exports below keep `mcopy::CopyController` and friends resolvable.
@@ -14,6 +15,7 @@ pub mod clipboard;
 pub mod copy;
 pub mod platform;
 pub mod ui;
+pub mod update;
 pub mod util;
 
 /// Reverse-DNS identifier for the application.

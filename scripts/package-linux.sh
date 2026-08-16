@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Build the Linux distribution artifacts.
 #
-#   dist/mcopy_<version>_amd64.deb        — Debian/Ubuntu package
-#   dist/mcopy-<version>-x86_64.tar.gz    — portable tarball + install.sh
+#   dist/mcopy-<version>-x86_64.AppImage  — portable, runs on any distro
+#   dist/mcopy-<version>-x86_64.tar.gz    — tarball + install.sh (~/.local)
 #
-# The .deb is assembled with dpkg-deb, which ships with Debian and Ubuntu (and
-# is preinstalled on GitHub's ubuntu runners), so packaging adds no build
-# dependencies. Runtime dependencies are derived from the linked binary rather
-# than hand-maintained, so they cannot drift from what gpui actually needs.
+# AppImage is used instead of a .deb so the same artifact runs on Debian,
+# Fedora, Arch and everything else without a package manager involved. The
+# AppImage is built with appimagetool, downloaded on demand if it is not
+# already on PATH — it needs no other build dependencies.
 #
 # Usage: scripts/package-linux.sh [path/to/mcopy-binary]
 set -euo pipefail
@@ -38,8 +38,9 @@ mkdir -p dist
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Shared file layout used by both the .deb and the tarball. Paths are relative
-# to an install prefix so the tarball can target ~/.local instead of /usr.
+# Shared file layout used by both the AppImage and the tarball. Paths are
+# relative to an install prefix so the tarball can target ~/.local instead of
+# /usr, and the AppDir can target /usr under its own root.
 stage_tree() {
   local root="$1" prefix="$2"
   install -Dm755 "$BIN"      "$root$prefix/bin/mcopy"
@@ -65,105 +66,38 @@ if command -v desktop-file-validate >/dev/null 2>&1; then
     || { echo "error: desktop entry failed validation" >&2; exit 1; }
 fi
 
-# ---------------------------------------------------------------- deb --------
+# ----------------------------------------------------------- AppImage --------
 
-DEB_ROOT="$WORK/deb"
-stage_tree "$DEB_ROOT" "/usr"
-mkdir -p "$DEB_ROOT/DEBIAN"
+APPDIR="$WORK/AppDir"
+stage_tree "$APPDIR" "/usr"
 
-# Resolve runtime dependencies from the binary's own NEEDED entries. dpkg-shlibdeps
-# is the correct tool but needs a full debian/ tree, so map the shared objects to
-# packages directly with dpkg -S.
-resolve_dependencies() {
-  local libs packages=()
-  libs="$(ldd "$BIN" 2>/dev/null | awk '/=> \//{print $3}' | sort -u)" || return 0
+# appimagetool requires the desktop entry and an icon at the AppDir root (not
+# just under usr/share), named so the Icon= key in the desktop file resolves.
+install -Dm644 "$DESKTOP" "$APPDIR/${APP_ID}.desktop"
+install -Dm644 "$ICON"    "$APPDIR/${APP_ID}.svg"
 
-  while IFS= read -r lib; do
-    [ -n "$lib" ] || continue
-    local pkg
-    pkg="$(dpkg -S "$(readlink -f "$lib")" 2>/dev/null | cut -d: -f1 | head -1)" || continue
-    [ -n "$pkg" ] && packages+=("$pkg")
-  done <<< "$libs"
-
-  printf '%s\n' "${packages[@]}" \
-    | sort -u \
-    | awk 'BEGIN { separator = "" } { printf "%s%s", separator, $0; separator = ", " } END { if (NR) print "" }'
-}
-
-DEPENDS="$(resolve_dependencies || true)"
-# gpui renders through Vulkan and needs a loader at runtime; it is dlopen'd, so
-# it never shows up in ldd output and has to be named explicitly.
-if [ -n "$DEPENDS" ]; then
-  DEPENDS="$DEPENDS, libvulkan1"
-else
-  echo "warning: could not resolve library dependencies; falling back to a known-good list" >&2
-  DEPENDS="libc6, libgcc-s1, libx11-6, libxcb1, libxkbcommon0, libwayland-client0, libfontconfig1, libvulkan1"
-fi
-
-INSTALLED_SIZE="$(du -ks "$DEB_ROOT/usr" | cut -f1)"
-
-cat > "$DEB_ROOT/DEBIAN/control" <<CONTROL
-Package: mcopy
-Version: ${VERSION}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: ${APP_MAINTAINER}
-Installed-Size: ${INSTALLED_SIZE}
-Depends: ${DEPENDS}
-Homepage: ${APP_HOMEPAGE}
-Description: Fast and reliable file copy utility
- mcopy turns the file manager right-click gesture into an asynchronous copy
- pipeline with a live progress window and pause, resume and cancel controls.
- .
- File manager integration is per-user and is registered from the application
- itself, so installing this package never modifies another user's home
- directory.
-CONTROL
-
-# The file-manager integration is per-user, so the package cannot register it
-# for everyone at install time. Tell the user how, once, rather than silently
-# doing nothing.
-cat > "$DEB_ROOT/DEBIAN/postinst" <<'POSTINST'
+cat > "$APPDIR/AppRun" <<'APPRUN'
 #!/bin/sh
-set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/mcopy" "$@"
+APPRUN
+chmod 755 "$APPDIR/AppRun"
 
-if [ "$1" = "configure" ]; then
-    # Refresh the desktop and icon caches so the launcher entry appears without
-    # a re-login. Both are optional on minimal systems.
-    if command -v update-desktop-database >/dev/null 2>&1; then
-        update-desktop-database -q /usr/share/applications || true
-    fi
-    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        gtk-update-icon-cache -qtf /usr/share/icons/hicolor || true
-    fi
-
-    echo "mcopy installed. Run 'mcopy shell-install' (or launch mcopy and press"
-    echo "Install) to add the file manager entries for your user account."
+APPIMAGETOOL="appimagetool"
+if ! command -v appimagetool >/dev/null 2>&1; then
+  APPIMAGETOOL="$WORK/appimagetool-x86_64.AppImage"
+  echo "appimagetool not found on PATH; downloading…" >&2
+  curl -fsSL -o "$APPIMAGETOOL" \
+    https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+  chmod +x "$APPIMAGETOOL"
 fi
 
-exit 0
-POSTINST
-chmod 755 "$DEB_ROOT/DEBIAN/postinst"
-
-cat > "$DEB_ROOT/DEBIAN/prerm" <<'PRERM'
-#!/bin/sh
-set -e
-
-# Remove the invoking user's menu entries before the binary goes away, so no
-# entry is left pointing at a deleted executable. Other users' entries are
-# theirs to remove; `mcopy shell-uninstall` does it per account.
-if [ "$1" = "remove" ] && [ -x /usr/bin/mcopy ]; then
-    /usr/bin/mcopy shell-uninstall >/dev/null 2>&1 || true
-fi
-
-exit 0
-PRERM
-chmod 755 "$DEB_ROOT/DEBIAN/prerm"
-
-DEB="dist/mcopy_${VERSION}_amd64.deb"
-dpkg-deb --build --root-owner-group "$DEB_ROOT" "$DEB" >/dev/null
-echo "wrote $DEB"
+APPIMAGE="dist/mcopy-${VERSION}-x86_64.AppImage"
+rm -f "$APPIMAGE"
+# --appimage-extract-and-run avoids requiring FUSE, which most CI runners and
+# some desktops don't have set up.
+ARCH=x86_64 "$APPIMAGETOOL" --appimage-extract-and-run "$APPDIR" "$APPIMAGE"
+echo "wrote $APPIMAGE"
 
 # ------------------------------------------------------------- tarball -------
 

@@ -92,10 +92,29 @@ impl InstallLocation {
     }
 }
 
+/// The durable path that represents this process.
+///
+/// Not the same as `current_exe()` for an AppImage: the runtime mounts the
+/// image under `/tmp/.mount_XXXXXX` and runs the binary from inside it, so
+/// `current_exe()` reports a path that stops existing the moment the process
+/// exits — and that [`classify`] correctly rejects as a mounted image. The
+/// runtime always exports `$APPIMAGE` as the absolute path of the `.AppImage`
+/// file the user actually keeps, which is what menu entries must point at.
+pub fn resolve_exe_path() -> anyhow::Result<PathBuf> {
+    #[cfg(target_os = "linux")]
+    if let Some(appimage) = std::env::var_os("APPIMAGE") {
+        let appimage = PathBuf::from(appimage);
+        if appimage.is_absolute() {
+            return Ok(appimage);
+        }
+    }
+
+    Ok(std::env::current_exe()?)
+}
+
 /// Classify the currently running executable.
 pub fn detect() -> anyhow::Result<InstallLocation> {
-    let exe = std::env::current_exe()?;
-    Ok(classify(&exe))
+    Ok(classify(&resolve_exe_path()?))
 }
 
 /// Classify an arbitrary path.
@@ -335,6 +354,22 @@ mod tests {
             classify(&exe).blocking_reason(),
             Some(VolatileReason::MountedImage)
         );
+    }
+
+    /// The whole point of [`resolve_exe_path`]: the `.AppImage` file the user
+    /// keeps is durable even though the mount point it runs from is not. If
+    /// this regressed, registering from an AppImage would refuse itself.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_appimage_file_itself_is_not_volatile() {
+        let exe =
+            PathBuf::from("/home/user/Applications/mcopy-x86_64.AppImage");
+        let location = classify(&exe);
+        assert!(
+            location.is_usable(),
+            "the AppImage's own path must be registerable"
+        );
+        assert_eq!(location.blocking_reason(), None);
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]

@@ -4,6 +4,40 @@ All notable user-facing changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-16
+
+Installation is now entirely the installer's job. mcopy no longer asks you to
+finish setting it up, and it tells you when a new version is out.
+
+### Added
+
+- **mcopy checks for updates.** Launching it on its own asks GitHub for a newer
+  release, at most once a day, and offers to install one if it finds it. The
+  download is verified against the release's published checksum before it runs;
+  a file that does not match is discarded. Copy and paste never check — they run
+  once per item from the file manager and must not wait on the network.
+- Releases now publish a `SHA256SUMS` file alongside the installers.
+
+### Changed
+
+- **The setup window is gone.** Its Install button only ever registered the
+  right-click entries, which now happens by itself: the installers do it as they
+  install, and running mcopy registers or repairs them silently. A window
+  appears only when something needs you — the entries cannot be registered, or
+  an update is available.
+- Linux packaging switched from a `.deb` to an AppImage, so the same downloaded
+  file runs on any distribution instead of only Debian and Ubuntu. The portable
+  tarball is unchanged.
+
+### Fixed
+
+- **The right-click entries can be registered from the AppImage.** An AppImage
+  runs from a temporary mount that mcopy correctly refuses to register against,
+  and it had no way to find the real file — so registering always failed, from
+  the Install button as well as `mcopy shell-install`. It now resolves the
+  `.AppImage` file itself, and the menu entries point at a path that survives
+  the process exiting.
+
 ## [0.3.0] - 2026-08-04
 
 Linux joins Windows and macOS as a supported platform, and mcopy now installs

@@ -5,9 +5,9 @@ name: release
 #
 # Each platform ships a real installer, so the downloaded file is no longer
 # required once installation finishes:
-#   Windows  mcopy-setup-<version>-x86_64.exe   (Inno Setup, per-user, no UAC)
-#   macOS    mcopy-<version>.pkg / .dmg         (pkgbuild / hdiutil)
-#   Linux    mcopy_<version>_amd64.deb + .tar.gz (dpkg-deb)
+#   Windows  mcopy-setup-<version>-x86_64.exe        (Inno Setup, per-user, no UAC)
+#   macOS    mcopy-<version>.pkg / .dmg              (pkgbuild / hdiutil)
+#   Linux    mcopy-<version>-x86_64.AppImage + .tar.gz (appimagetool)
 #
 # Code signing / notarization is out of scope; see the release notes.
 
@@ -111,8 +111,9 @@ jobs:
         run: |
           sudo apt-get update
           # gpui links against X11/Wayland, xkbcommon and fontconfig, and renders
-          # through Vulkan. These are build-time headers; the runtime packages
-          # are declared by the .deb.
+          # through Vulkan. These are build-time headers; the AppImage does not
+          # bundle the matching runtime libraries, so it expects them already
+          # present on the host, which is true of any current desktop distro.
           sudo apt-get install --no-install-recommends -y \
             libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libfontconfig1-dev libfreetype6-dev \
@@ -189,7 +190,7 @@ jobs:
           ./scripts/bundle-macos.sh
           ./scripts/package-macos.sh
 
-      - name: Package Linux deb and tarball
+      - name: Package Linux AppImage and tarball
         if: matrix.name == 'linux'
         run: ./scripts/package-linux.sh
 
@@ -201,7 +202,7 @@ jobs:
             dist/*.exe
             dist/*.pkg
             dist/*.dmg
-            dist/*.deb
+            dist/*.AppImage
             dist/*.tar.gz
           if-no-files-found: error
 
@@ -252,6 +253,13 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # The in-app updater downloads and then runs these artifacts, and none of
+      # them are code-signed. It refuses to install anything it cannot check
+      # against this file, so a release without it offers no automatic update.
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum *.exe *.pkg *.dmg *.AppImage *.tar.gz > SHA256SUMS
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -262,7 +270,8 @@ jobs:
             dist/*.exe
             dist/*.pkg
             dist/*.dmg
-            dist/*.deb
+            dist/*.AppImage
             dist/*.tar.gz
+            dist/SHA256SUMS
           body_path: release-notes.md
           make_latest: true

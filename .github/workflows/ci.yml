@@ -98,43 +98,28 @@ jobs:
         if: runner.os == 'Linux'
         run: ./scripts/package-linux.sh
 
-      # A .deb that does not install cleanly is not a working artifact.
-      - name: Verify the Linux package installs and uninstalls
+      # An AppImage that doesn't run is not a working artifact.
+      - name: Verify the Linux AppImage runs
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          deb="$(ls dist/mcopy_*_amd64.deb)"
+          appimage="$(readlink -f dist/mcopy-*-x86_64.AppImage)"
+          chmod +x "$appimage"
 
-          # The Maintainer field is what gives the installed package an owner;
-          # a placeholder here would ship an unattributed package.
-          maintainer="$(dpkg-deb --field "$deb" Maintainer)"
-          echo "Maintainer: $maintainer"
-          case "$maintainer" in
-            *noreply@github.com*|*users.noreply.github.com*) ;;
-            *) echo "unexpected Maintainer: $maintainer" >&2; exit 1 ;;
-          esac
-          test -n "$(dpkg-deb --field "$deb" Homepage)"
+          # --appimage-extract-and-run avoids requiring FUSE, which this
+          # runner doesn't have set up.
+          "$appimage" --appimage-extract-and-run --version
+          "$appimage" --appimage-extract-and-run status
 
-          sudo apt-get install -y "./$deb"
-          command -v mcopy
-          # Launching from PATH after installing is the behaviour that broke in
-          # 0.2, where the menu entries pointed at the download directory.
-          mcopy --version
-          mcopy status
-
-          # The desktop entry, icon and AppStream component must all be named
-          # after the application id, or software centres cannot pair them.
-          test -f /usr/share/applications/io.github.nakamoz.mcopy.desktop
-          test -f /usr/share/metainfo/io.github.nakamoz.mcopy.metainfo.xml
-          test -f /usr/share/icons/hicolor/scalable/apps/io.github.nakamoz.mcopy.svg
+          # The desktop entry and icon must both be named after the
+          # application id, or software centres cannot pair them, and
+          # appimagetool would have refused to build without them.
+          extract_dir="$(mktemp -d)"
+          (cd "$extract_dir" && "$appimage" --appimage-extract >/dev/null)
+          test -f "$extract_dir/squashfs-root/io.github.nakamoz.mcopy.desktop"
+          test -f "$extract_dir/squashfs-root/io.github.nakamoz.mcopy.svg"
           appstreamcli validate --no-net \
-            /usr/share/metainfo/io.github.nakamoz.mcopy.metainfo.xml
+            "$extract_dir/squashfs-root/usr/share/metainfo/io.github.nakamoz.mcopy.metainfo.xml"
           desktop-file-validate \
-            /usr/share/applications/io.github.nakamoz.mcopy.desktop
-
-          sudo apt-get remove -y mcopy
-          # Bash cached /usr/bin/mcopy when it was run above. Clear that cache
-          # before asking PATH whether the command still exists.
-          hash -r
-          test ! -e /usr/bin/mcopy
-          ! command -v mcopy
+            "$extract_dir/squashfs-root/io.github.nakamoz.mcopy.desktop"
+          rm -rf "$extract_dir"

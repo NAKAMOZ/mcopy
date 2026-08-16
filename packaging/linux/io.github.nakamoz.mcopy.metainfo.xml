@@ -79,6 +79,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.1" date="2026-08-16">
+      <description>
+        <p>
+          mcopy now sets up its own right-click entries and tells you when a new
+          version is available.
+        </p>
+        <ul>
+          <li>The setup window is gone; the menu entries register themselves</li>
+          <li>Registering the menu entries works from the AppImage</li>
+          <li>A daily update check, with verified downloads</li>
+        </ul>
+      </description>
+      <url type="details">https://github.com/NAKAMOZ/mcopy/releases/tag/v0.3.1</url>
+    </release>
     <release version="0.3.0" date="2026-08-04">
       <description>
         <p>

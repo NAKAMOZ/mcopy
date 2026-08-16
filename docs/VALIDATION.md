@@ -1,4 +1,4 @@
-# Platform validation checklist — 0.3.0
+# Platform validation checklist — 0.3.1
 
 Automated tests cover the state machine, the escaping rules, the window
 configuration and the shell-integration side effects. What they cannot cover is
@@ -25,10 +25,10 @@ an automated test; they are listed for completeness, not for re-testing by hand.
 | --- | ---------------------------------------------------------------------------------------------------- | ------- | ----- | ----- |
 | 1   | The installer completes without an administrator or root prompt                                      | ☐       | ☐     | ☐     |
 | 2   | The app appears in the Start menu / Launchpad / applications menu                                    | ☐       | ☐     | ☐     |
-| 3   | **Delete the installer, eject the `.dmg`, delete the `.deb`, then launch the app** — it still starts | ☐       | ☐     | ☐     |
+| 3   | **Delete the installer, eject the `.dmg`, delete the tarball extraction, then launch the app** — it still starts | ☐       | ☐     | ☐     |
 | 4   | Right-click menu entries still work after step 3                                                     | ☐       | ☐     | ☐     |
 | 5   | Running from the download folder refuses to register menus and says why                              | auto    | auto  | auto  |
-| 6   | Uninstall via Settings ▸ Apps / Trash / `apt remove` completes cleanly                               | ☐       | ☐     | ☐     |
+| 6   | Uninstall via Settings ▸ Apps / Trash / `./uninstall.sh` completes cleanly                            | ☐       | ☐     | ☐     |
 | 7   | After uninstall: no shortcuts, no menu entries, no running processes                                 | ☐       | ☐     | ☐     |
 | 8   | Reinstalling over an existing install works                                                          | ☐       | ☐     | ☐     |
 
@@ -37,8 +37,10 @@ Notes:
 - On Windows, the installer is per-user and installs to
   `%LOCALAPPDATA%\Programs\mcopy`. Expect a SmartScreen warning (unsigned).
 - On macOS, expect a Gatekeeper warning; use right-click ▸ Open the first time.
-- On Linux, the `.deb` installs the binary and launcher; the _menu_ entries are
-  per-user and are registered by pressing Install in the app once.
+- On Linux, run the AppImage directly (no install step), or extract the
+  tarball and run `install.sh` to place the binary and launcher under
+  `~/.local`. The _menu_ entries are per-user and register themselves:
+  `install.sh` does it for the tarball, and the AppImage does it on first run.
 
 ## Theme
 
@@ -70,55 +72,60 @@ a session without a portal will report light mode and stay there.
 Use a large enough source tree that the copy lasts several seconds; a copy that
 finishes instantly cannot demonstrate rows 14–20.
 
-## Setup window shutdown
+## Updates
+
+The prompt only appears when a newer release exists, so testing it needs either
+a pre-release tag or a temporarily lowered `version` in `Cargo.toml`.
 
 | #   | Check                                                                                   | Windows | macOS | Linux |
 | --- | --------------------------------------------------------------------------------------- | ------- | ----- | ----- |
-| 23  | **One click on the close button closes it**                                             | ☐       | ☐     | ☐     |
-| 24  | The OS close button / Alt-F4 / Cmd-W also closes it in one action                       | ☐       | ☐     | ☐     |
-| 25  | Closing while an install is running cancels and closes                                  | ☐       | ☐     | ☐     |
-| 26  | No `mcopy` process remains afterwards (Task Manager / Activity Monitor / `pgrep mcopy`) | ☐       | ☐     | ☐     |
-| 27  | Repeated close requests collapse into one shutdown                                      | auto    | auto  | auto  |
-| 28  | The install worker is joined, not abandoned                                             | auto    | auto  | auto  |
+| 23  | **A newer release opens the prompt; running the latest opens nothing**                  | ☐       | ☐     | ☐     |
+| 24  | The check happens at most once a day (second launch makes no request)                   | ☐       | ☐     | ☐     |
+| 25  | Accepting downloads, verifies, and hands off to the platform installer                  | ☐       | ☐     | ☐     |
+| 26  | A tampered `SHA256SUMS` entry aborts the install and deletes the download               | ☐       | ☐     | ☐     |
+| 27  | "Not now" closes without downloading, and no `mcopy` process remains                    | ☐       | ☐     | ☐     |
+| 28  | Linux: a tarball install offers the releases page rather than a download                | —       | —     | ☐     |
+| 29  | Linux: the replaced AppImage runs the new version on the next launch                    | —       | —     | ☐     |
+| 30  | Offline or unreachable GitHub is silent — no error window, app still works              | ☐       | ☐     | ☐     |
 
 ## Permissions
 
 | #   | Check                                                                                   | Windows | macOS | Linux |
 | --- | --------------------------------------------------------------------------------------- | ------- | ----- | ----- |
-| 29  | **Registering the menu never prompts for administrator or root**                        | auto    | auto  | auto  |
-| 30  | Menu entries are written under the current user only                                    | auto    | —     | auto  |
-| 31  | Pasting into a protected folder shows a named reason, not a bare count                  | ☐       | ☐     | ☐     |
-| 32  | macOS: pasting into `~/Desktop` or `~/Documents` either works or names Full Disk Access | —       | ☐     | —     |
-| 33  | Pasting into a read-only volume fails before starting, with a reason                    | ☐       | ☐     | ☐     |
-| 34  | Pasting a folder into itself is refused                                                 | auto    | auto  | auto  |
-| 35  | Upgrading from 0.2 removes or reports the old machine-wide entries                      | ☐       | —     | —     |
+| 31  | **Registering the menu never prompts for administrator or root**                        | auto    | auto  | auto  |
+| 32  | Menu entries are written under the current user only                                    | auto    | —     | auto  |
+| 33  | Pasting into a protected folder shows a named reason, not a bare count                  | ☐       | ☐     | ☐     |
+| 34  | macOS: pasting into `~/Desktop` or `~/Documents` either works or names Full Disk Access | —       | ☐     | —     |
+| 35  | Pasting into a read-only volume fails before starting, with a reason                    | ☐       | ☐     | ☐     |
+| 36  | Pasting a folder into itself is refused                                                 | auto    | auto  | auto  |
+| 37  | Upgrading from 0.2 removes or reports the old machine-wide entries                      | ☐       | —     | —     |
 
-For row 31 on Windows, use a folder protected by Controlled Folder Access, or
+For row 33 on Windows, use a folder protected by Controlled Folder Access, or
 any directory whose ACL denies write.
 
 ## Copy and paste state
 
 | #   | Check                                                        | Windows | macOS | Linux |
 | --- | ------------------------------------------------------------ | ------- | ----- | ----- |
-| 36  | Fresh profile: **no Paste entry before anything is copied**  | ☐       | n/a   | ☐     |
-| 37  | After Copy: the Paste entry appears                          | ☐       | n/a   | ☐     |
-| 38  | After a successful Paste: the entry disappears               | ☐       | n/a   | ☐     |
-| 39  | Delete the copied source, reopen the menu: the entry is gone | ☐       | n/a   | ☐     |
-| 40  | A cancelled paste keeps the entry, so it can be retried      | auto    | auto  | auto  |
-| 41  | A failed paste keeps the entry                               | auto    | auto  | auto  |
-| 42  | Reboot after a successful paste: the entry stays hidden      | ☐       | n/a   | ☐     |
-| 43  | Only a new copy brings the entry back                        | auto    | auto  | auto  |
-| 44  | Two rapid pastes: the second reports "already in progress"   | auto    | auto  | auto  |
-| 45  | Multi-select copy of several files produces one session      | auto    | auto  | auto  |
-| 46  | Pasting into a drive root (`D:\`) works                      | ☐       | —     | —     |
-| 47  | macOS: Paste with nothing copied shows "Nothing to paste"    | —       | ☐     | —     |
+| 38  | Fresh profile: **no Paste entry before anything is copied**  | ☐       | n/a   | ☐     |
+| 39  | After Copy: the Paste entry appears                          | ☐       | n/a   | ☐     |
+| 40  | After a successful Paste: the entry disappears               | ☐       | n/a   | ☐     |
+| 41  | Delete the copied source, reopen the menu: the entry is gone | ☐       | n/a   | ☐     |
+| 42  | A cancelled paste keeps the entry, so it can be retried      | auto    | auto  | auto  |
+| 43  | A failed paste keeps the entry                               | auto    | auto  | auto  |
+| 44  | Reboot after a successful paste: the entry stays hidden      | ☐       | n/a   | ☐     |
+| 45  | Only a new copy brings the entry back                        | auto    | auto  | auto  |
+| 46  | Two rapid pastes: the second reports "already in progress"   | auto    | auto  | auto  |
+| 47  | Multi-select copy of several files produces one session      | auto    | auto  | auto  |
+| 48  | Pasting into a drive root (`D:\`) works                      | ☐       | —     | —     |
+| 49  | macOS: Paste with nothing copied shows "Nothing to paste"    | —       | ☐     | —     |
 
-Rows 36–39 and 42 are marked `n/a` for macOS: `NSServices` visibility is static,
-so the Paste service stays listed there by design. Row 47 is its replacement.
+Rows 38–41 and 44 are marked `n/a` for macOS: `NSServices` visibility is static,
+so the Paste service stays listed there by design. Row 49 is its replacement.
 
 ## Linux desktop environments
 
-Row 14 and rows 36–39 depend on the desktop environment. Check at least:
+Row 14 and rows 38–41 depend on the desktop environment. Check at least:
 
 | Environment            | Taskbar presence | Nautilus menu | Dolphin menu |
 | ---------------------- | ---------------- | ------------- | ------------ |
@@ -126,7 +133,7 @@ Row 14 and rows 36–39 depend on the desktop environment. Check at least:
 | GNOME / X11            | ☐                | ☐             | —            |
 | KDE Plasma / Wayland   | ☐                | —             | ☐            |
 | KDE Plasma / X11       | ☐                | —             | ☐            |
-| A tiling WM (sway, i3) | ☐                | —             | —            |
+| A tiling WM (sway, i3) | ☐                | —             | —            |<>
 
 Client-side decorations and window transparency render inconsistently across
 compositors, and some tiling window managers ignore taskbar hints entirely.

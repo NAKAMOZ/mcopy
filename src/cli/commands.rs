@@ -4,6 +4,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use mcopy::clipboard::{self, PasteRefusal};
 use mcopy::platform::{self, ContextMenu, Platform};
 use mcopy::ui;
+use mcopy::update;
 use mcopy::{
     CopyController, CopyItem, ProgressPhase, ProgressUpdate,
     calculate_concurrency, collect_files, copy_files_with_progress, errln,
@@ -296,19 +297,60 @@ fn report_paste_error(message: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// No subcommand: open the setup window when no paths were given, otherwise
-/// run the legacy `mcopy <src> <dst>` terminal copy.
+/// No subcommand: run the bare launch when no paths were given, otherwise run
+/// the legacy `mcopy <src> <dst>` terminal copy.
 pub async fn dispatch_default(args: Args) -> anyhow::Result<()> {
     if args.src.is_none() && args.dst.is_none() {
-        let exe = std::env::current_exe()?;
-        // Correct any stale menu visibility left by a crash or a reboot before
-        // the user has a chance to see it.
-        clipboard::resync_paste_visibility();
-        ui::show_install_window(exe);
+        run_bare_launch().await;
         return Ok(());
     }
 
     run_legacy(args).await
+}
+
+/// `mcopy` with no arguments — what a double-clicked icon runs.
+///
+/// Registration is idempotent and cheap, so every bare launch is a safe place
+/// to repair an integration left stale by an upgrade. Nothing is shown when it
+/// succeeds: the native installers are what install mcopy now, and an app that
+/// opens a window to say "there is nothing to do" is just noise. A window
+/// appears only when something actually needs the user — registration is
+/// blocked, or a new version is available.
+///
+/// This is also the only place the update check runs. `copy` and `paste` are
+/// invoked once per selected item by the file manager, and must never pay for
+/// a network round-trip.
+async fn run_bare_launch() {
+    // Correct any stale menu visibility left by a crash or a reboot before the
+    // user has a chance to see it.
+    clipboard::resync_paste_visibility();
+
+    let exe = match platform::location::resolve_exe_path() {
+        Ok(exe) => exe,
+        Err(error) => {
+            log_error!("could not resolve the executable path: {error}");
+            errln!("Could not determine where mcopy is running from: {error}");
+            return;
+        },
+    };
+
+    if let Err(error) = platform::install_or_update_context_menu(&exe) {
+        // A launcher-started process has no console, so this is the one case
+        // that has to be visible. `report_paste_error` solves the same problem
+        // the same way.
+        log_error!("could not register the file manager integration: {error}");
+        let message = error.to_string();
+        errln!("{message}");
+        ui::show_notice_window("mcopy", &message);
+        // Only one window per run: `Application::run` blocks until it closes.
+        // The daily throttle means the skipped check just happens next launch.
+        return;
+    }
+
+    if let Some(update) = update::check_for_update().await {
+        log_info!("update available: {}", update.version);
+        ui::show_update_prompt(update);
+    }
 }
 
 /// Legacy CLI copy with `indicatif` terminal progress bars.

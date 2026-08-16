@@ -4,7 +4,7 @@ path = "src/main.rs"
 
 [package]
 name = "mcopy"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Nevzat ÇELİKKANAT"]
@@ -27,6 +27,21 @@ tokio = { version = "1.53.1", features = ["full"] }
 anyhow = "1.0.104"
 arboard = "3.6.1"  # Cross-platform clipboard
 dirs = "6.0.0"       # Per-user dir resolution (home, runtime, local data)
+
+# Update checking. rustls rather than native-tls on purpose: linking the
+# system OpenSSL would add a runtime .so dependency the AppImage does not
+# bundle, and the AppImage has to run on distros we never built against.
+# `-native-roots` still trusts the OS certificate store, so a corporate root
+# CA keeps working.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls-native-roots",
+    "json",
+    "stream",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+semver = "1"        # "0.3.10" > "0.3.9" — a string compare gets this wrong
+sha2 = "0.10"       # Verify a download before executing it
 
 # GPUI UI
 gpui = "0.2.2"

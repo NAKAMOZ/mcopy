@@ -57,8 +57,9 @@ Run `mcopy-setup-<version>-x86_64.exe`.
 
 Installs per-user into `%LOCALAPPDATA%\Programs\mcopy`, adds a Start menu entry,
 and registers itself in **Settings ▸ Apps** for normal removal. **No
-administrator rights are required at any point.** The installer offers to add the
-right-click entries; you can also add them later from the app.
+administrator rights are required at any point.** The installer registers the
+right-click entries for you — untick that task during setup if you would rather
+it did not, and use `mcopy shell-install` later if you change your mind.
 
 The installer is unsigned, so SmartScreen will warn on first run. Choose
 *More info ▸ Run anyway*.
@@ -75,13 +76,15 @@ Services removed too.
 
 ### Linux
 
-On Debian and Ubuntu:
+Download `mcopy-<version>-x86_64.AppImage`, make it executable and run it — it
+works on any distribution, no installation or root access required:
 
 ```bash
-sudo apt install ./mcopy_<version>_amd64.deb
+chmod +x mcopy-<version>-x86_64.AppImage
+./mcopy-<version>-x86_64.AppImage
 ```
 
-On other distributions, use the portable tarball:
+Alternatively, use the portable tarball to install into `~/.local`:
 
 ```bash
 tar xzf mcopy-<version>-x86_64.tar.gz
@@ -89,8 +92,10 @@ cd mcopy-<version>
 ./install.sh                 # installs into ~/.local, no root needed
 ```
 
-Then launch mcopy once and press **Install** to add the file-manager entries for
-your account. Removal is `sudo apt remove mcopy` or `./uninstall.sh`.
+The file-manager entries register themselves: the tarball's `install.sh` does it
+as it installs, and the AppImage does it the first time you run it. Removal is
+`mcopy shell-uninstall` followed by deleting the AppImage, or `./uninstall.sh`
+for a tarball install.
 
 Nautilus (GNOME) and Dolphin (KDE) are supported. Thunar is not — see
 [Limitations](#limitations).
@@ -129,7 +134,7 @@ mcopy is usable from a terminal as well as from the file manager.
 
 | Command | Purpose |
 | --- | --- |
-| `mcopy` | Open the setup window |
+| `mcopy` | Register the file-manager entries, check for updates, exit |
 | `mcopy shell-install` | Register the file-manager entries for the current user |
 | `mcopy shell-uninstall` | Remove them |
 | `mcopy shell-uninstall --all-users` | Also remove machine-wide entries left by 0.2 (Windows; needs admin) |
@@ -176,6 +181,21 @@ running is refused rather than allowed to race into the same folder.
 ### Concurrency
 
 Default is CPU cores × 4, clamped to between 4 and 128.
+
+### Updates
+
+Launching `mcopy` on its own checks GitHub for a newer release, at most once a
+day. The copy and paste commands never check — they are invoked once per item by
+the file manager and must not wait on the network.
+
+If there is a new version, mcopy asks before doing anything. Accepting downloads
+the artifact for your platform and verifies it against the release's
+`SHA256SUMS` before running it; a download that does not match is deleted and
+nothing is installed. From there Windows and macOS hand off to their own
+installers, and the AppImage is replaced in place and used from the next launch.
+
+A tarball install spreads files across a prefix rather than being one file to
+swap, so it is pointed at the releases page instead.
 
 ## Permissions
 
@@ -231,9 +251,15 @@ src/
 │   ├── theme.rs         light/dark palettes
 │   ├── widgets.rs       shared elements, including the logo
 │   ├── shutdown.rs      the single shutdown path
-│   ├── install/         the setup window
 │   ├── progress/        the copy progress window
+│   ├── update_prompt.rs the update-available window
 │   └── notice.rs        one-message window
+├── update/
+│   ├── mod.rs           the release check, download and verification
+│   ├── cache.rs         the once-a-day throttle
+│   ├── github.rs        the Releases API client
+│   ├── asset.rs         artifact selection and checksum matching
+│   └── installer.rs     the UpdateInstaller trait — the single #[cfg] seam
 └── util/                paths, shell escaping, logging, safe output
 ```
 
@@ -258,7 +284,7 @@ packaging script sources one of them. `build.rs` carries its own copy of the
 publisher and copyright (a build script cannot depend on the crate it builds) and
 exports what it embedded, which a unit test in `src/lib.rs` asserts against the
 constants — so the shipped binary's File Properties can never disagree with the
-`.deb`, the `.pkg` or the winget manifest.
+AppImage, the `.pkg` or the winget manifest.
 
 The app id is load-bearing rather than decorative. It is simultaneously the macOS
 `CFBundleIdentifier` and installer package id, the Wayland/X11 `app_id`, the
@@ -294,12 +320,12 @@ brew audit --cask --new --online dist/mcopy.rb
 Submit it to [homebrew-cask](https://github.com/Homebrew/homebrew-cask), or host
 it in a personal tap.
 
-**Linux distributions** — the `.deb` carries a proper `Maintainer`, `Homepage`
-and dependency list derived from the linked binary, and installs an AppStream
-component so GNOME Software and KDE Discover show the developer, description and
-license. `scripts/package-linux.sh` validates both the AppStream metadata and the
-desktop entry when `appstreamcli` and `desktop-file-validate` are available; CI
-installs them so validation always runs there.
+**Linux distributions** — the AppImage bundles an AppStream component and
+desktop entry so GNOME Software, KDE Discover and AppImage catalogues like
+[AppImageHub](https://appimage.github.io) can show the developer, description
+and license. `scripts/package-linux.sh` validates both the AppStream metadata
+and the desktop entry when `appstreamcli` and `desktop-file-validate` are
+available; CI installs them so validation always runs there.
 
 ### Tech stack
 
@@ -321,11 +347,11 @@ Packaging:
 
 ```bash
 ./scripts/package-macos.sh           # macOS only; uses built-in tools
-./scripts/package-linux.sh           # needs dpkg-deb
+./scripts/package-linux.sh           # needs appimagetool (auto-downloaded if missing)
 ```
 
 Bumping the version means editing `Cargo.toml` only — the Windows version
-resource, the Inno installer, the `.app` bundle, the `.deb` control file and the
+resource, the Inno installer, the `.app` bundle, the AppImage filename and the
 registry manifests all read it from there.
 
 Manual test coverage that CI cannot reach is listed in
@@ -372,7 +398,7 @@ section as the release notes.
 
 **The right-click menu does not appear.**
 Make sure mcopy is installed rather than being run from your downloads folder —
-the setup window will say so if it is not. Then open mcopy and press Install. On
+launching it will say so if it is not. Otherwise run `mcopy shell-install`. On
 Windows, entries appear under *Show more options*.
 
 **The Paste entry is missing.**
@@ -381,8 +407,7 @@ to see what is currently copied. It also hides if the copied sources have since
 been deleted.
 
 **The menu opens an older build.**
-Run `mcopy shell-uninstall`, then install the current version and press Install
-again.
+Run `mcopy shell-uninstall`, then install the current version and launch it once.
 
 **Items failed during a copy.**
 The progress window names the cause and stays open so you can read it. The log

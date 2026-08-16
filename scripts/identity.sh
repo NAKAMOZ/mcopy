@@ -2,10 +2,10 @@
 # Canonical project identity, read straight out of the source tree.
 #
 # Every packaging artifact needs the same publisher, copyright, app id and
-# version. Re-typing them per script is how a .deb ends up crediting someone
-# different from the .app, so this file derives them from the two places that
-# already own them — `src/lib.rs` and `Cargo.toml` — and nothing else declares
-# them independently.
+# version. Re-typing them per script is how an AppImage ends up crediting
+# someone different from the .app, so this file derives them from the two
+# places that already own them — `src/lib.rs` and `Cargo.toml` — and nothing
+# else declares them independently.
 #
 # Usage:  . "$(dirname "$0")/identity.sh"
 #
