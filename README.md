@@ -339,6 +339,38 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
+### Checking before you push
+
+`scripts/preflight.sh` runs what CI runs, in about three seconds against a warm
+`target/`:
+
+```bash
+./scripts/preflight.sh          # fmt, clippy, tests, CLI smoke test
+./scripts/preflight.sh --full   # also builds and packages, and runs the AppImage
+```
+
+It keeps going after a failure, so one run reports every problem rather than
+making you fix and re-run.
+
+What it cannot cover is **Windows and macOS**. CI builds on all three, and the
+`#[cfg(target_os)]` code behind those never compiles here. Cross-checking is not
+available either: `ring`, pulled in by gpui's HTTP client, compiles C for the
+target, so `cargo check --target x86_64-pc-windows-msvc` wants MSVC's `lib.exe`
+and the Apple target wants an osxcross toolchain — a rustup target alone is not
+enough. Treat a green preflight as "the Linux job will pass", nothing more.
+
+To run the workflow files themselves, use [act](https://github.com/nektos/act),
+which executes GitHub Actions in Docker:
+
+```bash
+act -j check -P ubuntu-latest=catthehacker/ubuntu:act-latest
+```
+
+Worth it when you have edited a workflow and want to know the YAML is right.
+Not worth it as a routine pre-push check: act only emulates the Linux runners,
+gets no `Swatinem/rust-cache`, and reinstalls the apt build dependencies and
+recompiles gpui from scratch each run — minutes, against preflight's seconds.
+
 Packaging:
 
 ```powershell
