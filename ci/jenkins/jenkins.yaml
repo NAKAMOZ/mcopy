@@ -1,0 +1,30 @@
+# Jenkins configuration as code.
+#
+# This file is the whole configuration: the container is disposable, and
+# recreating it reproduces this exactly. Nothing here is clicked in the UI.
+jenkins:
+  systemMessage: >
+    mcopy local CI — mirrors .github/workflows/ci.yml for the Linux job.
+    Windows and macOS are still only covered by GitHub.
+
+  # The pipeline farms its work out to a sibling container, so the controller
+  # itself only needs enough executors to drive them.
+  numExecutors: 2
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD:-admin}"
+
+  # The symbol is `loggedInUsersCanDoAnything`, not the class name — JCasC
+  # refuses to boot on an unknown one, and a container with --restart will then
+  # crash-loop rather than fail once.
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: http://localhost:8080/

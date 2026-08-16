@@ -1,0 +1,24 @@
+# The build agent: Rust plus everything gpui links against.
+#
+# These are the same packages .github/workflows/ci.yml installs with apt on the
+# ubuntu runner. Baking them into an image is the whole reason a local run can
+# be fast — the GitHub job reinstalls them on every run.
+FROM rust:1-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+        libwayland-dev libfontconfig1-dev libfreetype6-dev \
+        libvulkan-dev libssl-dev pkg-config \
+        appstream desktop-file-utils \
+        curl ca-certificates file zsync \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rustup component add clippy rustfmt
+
+# Jenkins runs the agent as the host user so the workspace stays writable, and
+# that user has no home directory in this image. Cargo and rustup are mounted
+# in from named volumes; making them world-writable keeps whatever uid Jenkins
+# picks able to use them.
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup
+RUN chmod -R a+w /usr/local/cargo /usr/local/rustup
