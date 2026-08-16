@@ -24,5 +24,12 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 # Everything this Jenkins knows comes from jenkins.yaml, so the first-run
 # wizard would only be in the way.
 COPY jenkins.yaml /var/jenkins_home/casc.yaml
+
+# ALLOW_LOCAL_CHECKOUT is off by default because on a shared Jenkins it would
+# let any job read arbitrary host paths through a "git" URL. This instance is
+# bound to localhost, has one user, and exists precisely to build the working
+# copy bind-mounted at /repo — read-only — so the checkout it blocks is the
+# whole point.
 ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc.yaml \
-    JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+    JAVA_OPTS="-Djenkins.install.runSetupWizard=false \
+-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"

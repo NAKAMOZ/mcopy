@@ -26,6 +26,10 @@ pipeline {
         // between builds, and recompiling gpui every time is the one thing
         // that would make this slower than pushing.
         CARGO_TARGET_DIR = '/cargo-target'
+        // Jenkins starts the agent as a uid with no passwd entry. The
+        // shell-integration tests write to the user's own directories, so
+        // they need a home that exists; the image provides this one.
+        HOME = '/home/ci'
     }
 
     options {

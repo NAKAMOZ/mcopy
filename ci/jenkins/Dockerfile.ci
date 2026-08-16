@@ -15,10 +15,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN rustup component add clippy rustfmt
 
-# Jenkins runs the agent as the host user so the workspace stays writable, and
-# that user has no home directory in this image. Cargo and rustup are mounted
-# in from named volumes; making them world-writable keeps whatever uid Jenkins
-# picks able to use them.
+# Jenkins starts the agent as `-u 1000:1000`, and the cache directories arrive
+# as named volumes. Docker seeds an empty volume from the image — ownership and
+# permissions included — so these directories have to exist here and be
+# writable, or the volumes come up owned by root and cargo cannot write to its
+# own registry. Creating them after the fact does not help: a volume is only
+# ever initialised once.
 ENV CARGO_HOME=/usr/local/cargo \
-    RUSTUP_HOME=/usr/local/rustup
-RUN chmod -R a+w /usr/local/cargo /usr/local/rustup
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_TARGET_DIR=/cargo-target
+RUN mkdir -p /usr/local/cargo/registry /cargo-target \
+    && chmod -R 777 /usr/local/cargo /usr/local/rustup /cargo-target
+
+# uid 1000 does not exist in this image, so it gets no home directory — and the
+# shell-integration tests register menu entries under the user's own
+# directories, which is the behaviour they exist to assert. Without somewhere
+# writable to call home they fail with "Permission denied", where the GitHub
+# runner passes because its user has a real home. Ephemeral by design: each
+# build starts from an empty one.
+RUN mkdir -p /home/ci && chmod 777 /home/ci
+ENV HOME=/home/ci
