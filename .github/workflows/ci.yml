@@ -13,6 +13,15 @@ on:
 permissions:
   contents: read
 
+# Three pushes in a row used to mean waiting for three full matrix runs. Only
+# the newest commit on a branch is worth testing, so supersede the rest.
+#
+# Deliberately not applied to the release workflow: a cancelled release leaves
+# a tag with no artifacts attached to it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
