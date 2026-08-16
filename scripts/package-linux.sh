@@ -17,11 +17,17 @@ cd "$(dirname "$0")/.."
 
 VERSION="$APP_VERSION"
 
-BIN="${1:-target/release/mcopy}"
+# `target` unless cargo has been told otherwise. Honouring CARGO_TARGET_DIR
+# matters wherever the build cache lives outside the tree — a CI agent that
+# keeps it on a volume, for one — because otherwise this looks for a binary
+# cargo just wrote somewhere else.
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+
+BIN="${1:-$TARGET_DIR/release/mcopy}"
 if [ ! -f "$BIN" ]; then
   echo "binary not found at $BIN — building release…" >&2
   cargo build --release --locked
-  BIN="target/release/mcopy"
+  BIN="$TARGET_DIR/release/mcopy"
 fi
 
 # The desktop entry, icon and AppStream component are all named after the
